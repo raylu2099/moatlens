@@ -121,7 +121,9 @@ class AuditReport(BaseModel):
     generated_at: datetime
 
     # User input
-    anchor_thesis: str = ""           # "why is this worth auditing" — written at start
+    anchor_thesis: str = ""              # "why is this worth auditing" — written at start
+    my_market_expectation: str = ""      # "what do you think the market is pricing in?"
+    my_variant_view: str = ""            # "what's your non-consensus view?" (Howard Marks)
 
     # 8 stages
     stages: list[StageResult] = Field(default_factory=list)

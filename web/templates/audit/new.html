@@ -1,43 +1,57 @@
 {% extends "base.html" %}
-{% block title %}New audit — Moatlens{% endblock %}
+{% block title %}新建审视 — Moatlens{% endblock %}
 {% block content %}
 
-<h1 class="text-2xl font-bold mb-4">Start a new audit</h1>
+<h1 class="text-2xl font-bold mb-4">新建 audit</h1>
 
 {% if missing_keys %}
 <div class="bg-red-900/20 border border-red-800 rounded p-4 mb-6">
-    <div class="font-bold text-red-300 mb-2">Missing API keys</div>
-    <p class="text-sm text-gray-300 mb-1">Add these to <code>.env</code> in the project root:</p>
+    <div class="font-bold text-red-300 mb-2">缺 API keys</div>
+    <p class="text-sm text-gray-300 mb-1">在项目根目录的 <code>.env</code> 加：</p>
     <ul class="text-sm text-gray-300 list-disc ml-6 mb-2">
         {% for k in missing_keys %}<li><code>{{ k }}</code></li>{% endfor %}
     </ul>
-    <p class="text-xs text-gray-500">Template: <code>.env.example</code></p>
+    <p class="text-xs text-gray-500">模板：<code>.env.example</code></p>
 </div>
 {% else %}
 <form method="POST" action="/audit/new" class="space-y-5 max-w-2xl bg-ink-800 border border-ink-700 rounded-lg p-6"
-      onsubmit="this.setAttribute('data-running', '1'); this.querySelector('button').innerText='Running (3-5 min)... do not close';">
+      onsubmit="this.setAttribute('data-running', '1'); this.querySelector('button').innerText='审视中 (3-5 分钟)... 不要关闭';">
     <div>
-        <label class="block text-sm text-gray-400 mb-1">Ticker (US stocks)</label>
+        <label class="block text-sm text-gray-400 mb-1">Ticker（美股）</label>
         <input name="ticker" required placeholder="AAPL" class="w-full bg-ink-900 border border-ink-700 rounded px-3 py-2 text-white font-mono uppercase">
     </div>
 
     <div>
         <label class="block text-sm text-gray-400 mb-1">
-            Your anchor thesis <span class="text-gray-600">(2-3 sentences — why is this worth auditing?)</span>
+            你的初始论点 <span class="text-gray-600">(2-3 句话 —— 为什么值得审视？Stage 8 会引用)</span>
         </label>
-        <textarea name="anchor_thesis" rows="3" placeholder="This is your anchor. Claude references it in Stage 8 (inversion) to stress-test." class="w-full bg-ink-900 border border-ink-700 rounded px-3 py-2 text-white"></textarea>
+        <textarea name="anchor_thesis" rows="3" placeholder="例如：护城河 = 客户转换成本高 + 品牌；管理层历史上把股东当合伙人；..." class="w-full bg-ink-900 border border-ink-700 rounded px-3 py-2 text-white"></textarea>
+    </div>
+
+    <div>
+        <label class="block text-sm text-gray-400 mb-1">
+            市场在 price in 什么？<span class="text-gray-600">(你感知的市场共识 —— 具体点)</span>
+        </label>
+        <textarea name="my_market_expectation" rows="2" placeholder="例如：市场定价未来 3 年收入 20% CAGR + 毛利率维持在 50%..." class="w-full bg-ink-900 border border-ink-700 rounded px-3 py-2 text-white"></textarea>
+    </div>
+
+    <div>
+        <label class="block text-sm text-gray-400 mb-1">
+            你的 variant view（非共识观点）<span class="text-gray-600">(Howard Marks：超额收益 = 正确 × 非共识)</span>
+        </label>
+        <textarea name="my_variant_view" rows="3" placeholder="例如：我认为市场低估了 AI 时代护城河加深；理由：数据飞轮 + 开发者锁定。若我对，未来 3 年..." class="w-full bg-ink-900 border border-ink-700 rounded px-3 py-2 text-white"></textarea>
     </div>
 
     <div class="flex items-center gap-2">
         <input type="checkbox" id="tech" name="tech_mode" value="1" class="w-4 h-4">
-        <label for="tech" class="text-sm text-gray-300">Tech stock mode <span class="text-gray-500">(SBC dilution check, higher PE tolerance, platform moat types)</span></label>
+        <label for="tech" class="text-sm text-gray-300">科技股模式 <span class="text-gray-500">(扣 SBC / 更高 PE 容忍 / 平台型护城河)</span></label>
     </div>
 
     <div class="border-t border-ink-700 pt-5">
         <div class="text-xs text-gray-500 mb-3">
-            ⏱️ Full audit takes ~3-5 minutes. API cost ~$0.30-$0.80 (Sonnet-4-5 + Perplexity + Financial Datasets). Uses your own keys.
+            ⏱️ 全量 audit 约 3-5 分钟。API 成本 ~$0.30-$0.80（Sonnet-4-5 + Perplexity + Financial Datasets）。用你自己的 key。
         </div>
-        <button type="submit" class="bg-gold hover:bg-yellow-500 text-ink-900 font-bold px-6 py-3 rounded">Run 8-stage audit →</button>
+        <button type="submit" class="bg-gold hover:bg-yellow-500 text-ink-900 font-bold px-6 py-3 rounded">运行 8-stage 审视 →</button>
     </div>
 </form>
 {% endif %}

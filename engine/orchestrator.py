@@ -5,17 +5,21 @@ Two modes (single code path, different consumption):
 - run_audit_auto(): run all stages, return full report (callback per stage)
 - run_audit_wizard(): generator yielding after each stage (CLI interactive)
 
+Knobs for iteration speed:
+- skip_claude:  stages 3/4/8 return Verdict.SKIP (free dry-run for testing rule stages)
+- only_stages:  list of stage ids — run exactly these (others SKIP, not dropped)
+- from_stage:   run this stage and all later ones (earlier ones SKIP if no resume_from)
+- resume_from:  previous AuditReport — stages already present are not re-run
+
 Hardening:
-- Per-stage exceptions become Verdict.SKIP with the reason in findings —
-  one bad stage no longer crashes the whole audit.
-- --resume support via resume_from: caller passes an AuditReport with
-  partial stages; orchestrator continues from the next stage.
+- Per-stage exceptions become Verdict.SKIP with the reason in findings.
+- Stage 8 is gated on prior-stage signal density to avoid burning Claude on empty data.
 """
 from __future__ import annotations
 
 import traceback
 from datetime import datetime
-from typing import Callable, Generator
+from typing import Callable, Generator, Iterable
 
 from engine.models import Action, AuditReport, ConfidenceLevel, StageResult, Thesis, Verdict
 from engine.providers import yfinance_provider as yfp
@@ -25,6 +29,10 @@ from engine.stages import (
     s7_safety, s8_inversion,
 )
 from shared.config import ApiKeys, Config
+
+
+# Stage IDs that invoke Claude — these are the ones skipped by --no-claude.
+CLAUDE_STAGE_IDS = {3, 4, 8}
 
 
 def _stage1(cfg, keys, ticker, tech_mode, prior):
@@ -48,9 +56,39 @@ def _stage6(cfg, keys, ticker, tech_mode, prior):
 def _stage7(cfg, keys, ticker, tech_mode, prior):
     return s7_safety.run(cfg, keys, ticker, prior.get(6, {}))
 
-def _stage8(cfg, keys, ticker, tech_mode, prior, anchor_thesis=""):
-    prior_for_s8 = {f"stage{k}": v for k, v in prior.items() if k in (3, 4, 6, 7)}
-    return s8_inversion.run(cfg, keys, ticker, anchor_thesis, prior_for_s8)
+def _stage8(cfg, keys, ticker, tech_mode, prior, anchor_thesis="", my_variant_view=""):
+    # Gating: if fewer than 2 of the prior qualitative/valuation stages produced
+    # usable data, skip Claude on Stage 8 — otherwise we pay $0.2-0.4 for
+    # hallucinated failure modes with no grounding.
+    relevant_ids = (3, 4, 6, 7)
+    useful = 0
+    for sid in relevant_ids:
+        raw = prior.get(sid, {}) or {}
+        if not raw or raw.get("error"):
+            continue
+        if (raw.get("claude_parsed") or raw.get("valuation")
+                or raw.get("base_iv")
+                or raw.get("margin_of_safety_pct") is not None):
+            useful += 1
+
+    if useful < 2:
+        return StageResult(
+            stage_id=8,
+            stage_name=s8_inversion.STAGE_NAME,
+            verdict=Verdict.SKIP,
+            findings=[
+                f"⚠️ 跳过 Stage 8：前序 stage 3/4/6/7 中仅 {useful} 个产生可用信号，"
+                "Claude 推理缺乏依据。先修复前序 stage 再重跑。",
+            ],
+            raw_data={"skipped_reason": "insufficient_prior_signals",
+                      "useful_prior_count": useful},
+        )
+
+    prior_for_s8 = {f"stage{k}": v for k, v in prior.items() if k in relevant_ids}
+    return s8_inversion.run(
+        cfg, keys, ticker, anchor_thesis, prior_for_s8,
+        my_variant_view=my_variant_view,
+    )
 
 
 STAGES: list[tuple[int, Callable]] = [
@@ -65,7 +103,10 @@ STAGES: list[tuple[int, Callable]] = [
 ]
 
 
-def _new_report(ticker: str, anchor_thesis: str = "") -> AuditReport:
+def _new_report(
+    ticker: str, anchor_thesis: str = "",
+    my_market_expectation: str = "", my_variant_view: str = "",
+) -> AuditReport:
     company = yfp.fetch_company_info(ticker)
     return AuditReport(
         ticker=ticker.upper(),
@@ -73,6 +114,8 @@ def _new_report(ticker: str, anchor_thesis: str = "") -> AuditReport:
         audit_date=datetime.now().strftime("%Y-%m-%d"),
         generated_at=datetime.now(),
         anchor_thesis=anchor_thesis,
+        my_market_expectation=my_market_expectation,
+        my_variant_view=my_variant_view,
     )
 
 
@@ -150,16 +193,21 @@ def _build_thesis(report: AuditReport) -> Thesis:
 def _track_cost(report: AuditReport, stage: StageResult) -> None:
     cost = stage.raw_data.get("cost_usd", 0) or 0
     report.total_api_cost_usd += cost
-    report.provider_costs[f"stage{stage.stage_id}"] = cost
+    # Use max so resumed stages don't overwrite with 0.
+    key = f"stage{stage.stage_id}"
+    report.provider_costs[key] = max(report.provider_costs.get(key, 0.0), cost)
 
 
 def _run_stage_safe(
     stage_id: int, fn: Callable, cfg, keys, ticker, tech_mode, prior, anchor_thesis,
+    my_variant_view: str = "",
 ) -> StageResult:
     """Run a stage with a hard safety net — any exception becomes SKIP."""
     try:
         if stage_id == 8:
-            return fn(cfg, keys, ticker, tech_mode, prior, anchor_thesis=anchor_thesis)
+            return fn(cfg, keys, ticker, tech_mode, prior,
+                      anchor_thesis=anchor_thesis,
+                      my_variant_view=my_variant_view)
         return fn(cfg, keys, ticker, tech_mode, prior)
     except Exception as e:
         tb = traceback.format_exc(limit=3)
@@ -170,6 +218,23 @@ def _run_stage_safe(
             findings=[f"⚠️ Stage raised {type(e).__name__}: {e}", f"```\n{tb}\n```"],
             raw_data={"error": str(e), "error_type": type(e).__name__},
         )
+
+
+def _skipped(stage_id: int, reason_cn: str) -> StageResult:
+    """Make a synthetic SKIP result (used by --no-claude / --only / --from)."""
+    name_map = {
+        1: s1_competence.STAGE_NAME, 2: s2_integrity.STAGE_NAME,
+        3: s3_moat.STAGE_NAME, 4: s4_capital.STAGE_NAME,
+        5: s5_owner_earnings.STAGE_NAME, 6: s6_valuation.STAGE_NAME,
+        7: s7_safety.STAGE_NAME, 8: s8_inversion.STAGE_NAME,
+    }
+    return StageResult(
+        stage_id=stage_id,
+        stage_name=name_map.get(stage_id, f"Stage {stage_id}"),
+        verdict=Verdict.SKIP,
+        findings=[f"⊘ {reason_cn}"],
+        raw_data={"skipped": True, "skip_reason": reason_cn},
+    )
 
 
 def _finalize(report: AuditReport) -> AuditReport:
@@ -185,28 +250,104 @@ def _finalize(report: AuditReport) -> AuditReport:
     return report
 
 
+def _plan_stages(
+    all_ids: Iterable[int],
+    only_stages: list[int] | None,
+    from_stage: int | None,
+    skip_claude: bool,
+    done_ids: set[int],
+) -> tuple[set[int], set[int]]:
+    """
+    Given knobs, return (to_run, to_skip_synthetically). `to_run` are stage ids we
+    actually execute; `to_skip_synthetically` get a SKIP result appended so the
+    report still has 8 stages (for diff + verdict logic).
+    """
+    all_ids = set(all_ids)
+    to_run: set[int] = set()
+    to_skip: set[int] = set()
+    for sid in all_ids:
+        if sid in done_ids:
+            continue
+        # Filter by only_stages
+        if only_stages is not None and sid not in only_stages:
+            to_skip.add(sid)
+            continue
+        # Filter by from_stage
+        if from_stage is not None and sid < from_stage:
+            to_skip.add(sid)
+            continue
+        # Filter by skip_claude
+        if skip_claude and sid in CLAUDE_STAGE_IDS:
+            to_skip.add(sid)
+            continue
+        to_run.add(sid)
+    return to_run, to_skip
+
+
+def _skip_reason(sid: int, only_stages, from_stage, skip_claude) -> str:
+    if only_stages is not None and sid not in only_stages:
+        return f"--only {sorted(only_stages)}"
+    if from_stage is not None and sid < from_stage:
+        return f"--from {from_stage}"
+    if skip_claude and sid in CLAUDE_STAGE_IDS:
+        return "--no-claude"
+    return "skipped"
+
+
 def run_audit_auto(
     cfg: Config, keys: ApiKeys, ticker: str,
     anchor_thesis: str = "",
     tech_mode: bool = False,
     progress_callback: Callable[[int, StageResult], None] | None = None,
     resume_from: AuditReport | None = None,
+    skip_claude: bool = False,
+    only_stages: list[int] | None = None,
+    from_stage: int | None = None,
+    my_market_expectation: str = "",
+    my_variant_view: str = "",
 ) -> AuditReport:
-    """Run all 8 stages. If resume_from is provided, skip stages already in it."""
-    report = resume_from or _new_report(ticker, anchor_thesis)
-    done_ids = {s.stage_id for s in report.stages}
+    report = resume_from or _new_report(
+        ticker, anchor_thesis,
+        my_market_expectation=my_market_expectation,
+        my_variant_view=my_variant_view,
+    )
+    if resume_from and my_variant_view and not report.my_variant_view:
+        report.my_variant_view = my_variant_view
+    if resume_from and my_market_expectation and not report.my_market_expectation:
+        report.my_market_expectation = my_market_expectation
+
+    done_ids = {s.stage_id for s in report.stages if s.verdict != Verdict.SKIP}
     prior = {s.stage_id: s.raw_data for s in report.stages}
+
+    effective_variant = my_variant_view or report.my_variant_view
+
+    all_ids = [sid for sid, _ in STAGES]
+    to_run, to_skip = _plan_stages(all_ids, only_stages, from_stage, skip_claude, done_ids)
 
     for sid, fn in STAGES:
         if sid in done_ids:
             continue
-        result = _run_stage_safe(sid, fn, cfg, keys, ticker, tech_mode, prior, anchor_thesis)
+        if sid in to_skip:
+            reason = _skip_reason(sid, only_stages, from_stage, skip_claude)
+            result = _skipped(sid, reason)
+        elif sid in to_run:
+            result = _run_stage_safe(
+                sid, fn, cfg, keys, ticker, tech_mode, prior, anchor_thesis,
+                my_variant_view=effective_variant,
+            )
+        else:
+            continue
+
+        # Replace any previous SKIP record for this stage (so resume + re-run works)
+        report.stages = [s for s in report.stages if s.stage_id != sid]
         report.stages.append(result)
         _track_cost(report, result)
         prior[sid] = result.raw_data
         if progress_callback:
             progress_callback(sid, result)
 
+    # Sort stages in canonical order for reproducibility
+    report.stages.sort(key=lambda s: s.stage_id)
     return _finalize(report)
 
 
@@ -215,21 +356,47 @@ def run_audit_wizard(
     anchor_thesis: str = "",
     tech_mode: bool = False,
     resume_from: AuditReport | None = None,
+    skip_claude: bool = False,
+    only_stages: list[int] | None = None,
+    from_stage: int | None = None,
+    my_market_expectation: str = "",
+    my_variant_view: str = "",
 ) -> Generator[tuple[int, StageResult, AuditReport], bool, AuditReport]:
-    """Interactive wizard: yield after each stage; caller sends True/False to continue."""
-    report = resume_from or _new_report(ticker, anchor_thesis)
-    done_ids = {s.stage_id for s in report.stages}
+    report = resume_from or _new_report(
+        ticker, anchor_thesis,
+        my_market_expectation=my_market_expectation,
+        my_variant_view=my_variant_view,
+    )
+    done_ids = {s.stage_id for s in report.stages if s.verdict != Verdict.SKIP}
     prior = {s.stage_id: s.raw_data for s in report.stages}
+
+    effective_variant = my_variant_view or report.my_variant_view
+
+    all_ids = [sid for sid, _ in STAGES]
+    to_run, to_skip = _plan_stages(all_ids, only_stages, from_stage, skip_claude, done_ids)
 
     for sid, fn in STAGES:
         if sid in done_ids:
             continue
-        result = _run_stage_safe(sid, fn, cfg, keys, ticker, tech_mode, prior, anchor_thesis)
+        if sid in to_skip:
+            reason = _skip_reason(sid, only_stages, from_stage, skip_claude)
+            result = _skipped(sid, reason)
+        elif sid in to_run:
+            result = _run_stage_safe(
+                sid, fn, cfg, keys, ticker, tech_mode, prior, anchor_thesis,
+                my_variant_view=effective_variant,
+            )
+        else:
+            continue
+
+        report.stages = [s for s in report.stages if s.stage_id != sid]
         report.stages.append(result)
         _track_cost(report, result)
         prior[sid] = result.raw_data
         cont = yield sid, result, report
         if cont is False:
+            report.stages.sort(key=lambda s: s.stage_id)
             return report
 
+    report.stages.sort(key=lambda s: s.stage_id)
     return _finalize(report)

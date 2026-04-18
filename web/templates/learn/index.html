@@ -1,9 +1,9 @@
 {% extends "base.html" %}
-{% block title %}Learn — Moatlens{% endblock %}
+{% block title %}知识库 — Moatlens{% endblock %}
 {% block content %}
 
-<h1 class="text-2xl font-bold mb-2">Learn</h1>
-<p class="text-gray-400 mb-6">The concepts behind Moatlens — pulled from Buffett shareholder letters, Munger's Poor Charlie's Almanack, Howard Marks memos, and Anthony Bolton's notes.</p>
+<h1 class="text-2xl font-bold mb-2">知识库</h1>
+<p class="text-gray-400 mb-6">Moatlens 背后的核心概念 —— 摘自 Buffett 股东信、Munger《Poor Charlie's Almanack》、Howard Marks memos、Anthony Bolton。</p>
 
 {% if concepts %}
 <div class="grid md:grid-cols-2 gap-3">
@@ -14,7 +14,7 @@
 {% endfor %}
 </div>
 {% else %}
-<p class="text-gray-500">Knowledge base is being populated. Check back soon.</p>
+<p class="text-gray-500">知识库还未填充。</p>
 {% endif %}
 
 {% endblock %}

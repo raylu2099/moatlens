@@ -102,6 +102,53 @@ def test_list_audits_sorts_newest_first(tmp_cfg):
     assert listing[0]["total_cost_usd"] == pytest.approx(0.01)
 
 
+def test_list_audits_writes_incremental_index(tmp_cfg):
+    """The _index.json should exist after a save, and repeated list_audits must be fast."""
+    from shared.storage import _index_path
+    r = _make_report("AAPL", "2026-04-18", {1: (Verdict.PASS, 1.0)})
+    save_audit(tmp_cfg, r, "md")
+    idx_path = _index_path(tmp_cfg)
+    assert idx_path.exists()
+
+    # Reading the index should not require reparsing the full AuditReport JSONs.
+    # Prove this by deleting the individual JSON and reading listing via index:
+    # actually no — we built a sanity check that if JSON is deleted the index rebuilds.
+    listing = list_audits(tmp_cfg)
+    assert len(listing) == 1
+    assert listing[0]["ticker"] == "AAPL"
+
+
+def test_list_audits_rebuilds_when_json_deleted(tmp_cfg):
+    """Stale-index safety: if a user deletes an audit JSON directly, list shouldn't lie."""
+    r = _make_report("AAPL", "2026-04-18", {1: (Verdict.PASS, 1.0)})
+    _, json_path = save_audit(tmp_cfg, r, "md")
+    json_path.unlink()
+
+    listing = list_audits(tmp_cfg)
+    assert listing == []
+
+
+def test_list_audits_decorates_age_and_staleness(tmp_cfg):
+    """Each listing row has age_days and a stale_level bucket."""
+    from datetime import date, timedelta
+
+    today = date.today()
+    fresh_date = (today - timedelta(days=10)).isoformat()
+    stale_date = (today - timedelta(days=100)).isoformat()
+    very_stale_date = (today - timedelta(days=200)).isoformat()
+
+    for d, name in [(fresh_date, "FRSH"), (stale_date, "STLE"), (very_stale_date, "VVST")]:
+        r = _make_report(name, d, {1: (Verdict.PASS, 1.0)})
+        save_audit(tmp_cfg, r, "md")
+
+    listing = {row["ticker"]: row for row in list_audits(tmp_cfg)}
+    assert listing["FRSH"]["stale_level"] == "fresh"
+    assert listing["STLE"]["stale_level"] == "stale"
+    assert listing["VVST"]["stale_level"] == "very_stale"
+    assert 9 <= listing["FRSH"]["age_days"] <= 11
+    assert 99 <= listing["STLE"]["age_days"] <= 101
+
+
 def test_load_last_two_audits(tmp_cfg):
     r_old = _make_report("AAPL", "2026-01-10", {1: (Verdict.PASS, 1.0)})
     r_new = _make_report("AAPL", "2026-04-10", {1: (Verdict.FAIL, 0.5)})

@@ -60,30 +60,50 @@ def _dcf_value_per_share(
     return pv / shares_outstanding
 
 
+_REVERSE_DCF_LO = -20.0
+_REVERSE_DCF_HI = 100.0
+_REVERSE_DCF_BOUNDARY_EPS = 0.5   # within 0.5% of a bound = didn't converge
+
+
 def _reverse_dcf_implied_growth(
     current_price: float, fcf_per_share_latest: float,
     wacc: float, terminal_growth: float, years: int = 10,
 ) -> float | None:
-    """Binary search for growth rate that makes DCF ≈ current price."""
+    """
+    Binary search for the growth rate that makes DCF ≈ current price.
+
+    Returns None if the answer lies outside the search bracket
+    [_REVERSE_DCF_LO, _REVERSE_DCF_HI] — either the stock is so cheap it
+    implies growth < -20% (catastrophic expectations) or so hot it implies
+    growth > 100% (meme/pre-revenue). A clamped-to-boundary number is worse
+    than None because it looks like a real answer.
+    """
     if fcf_per_share_latest <= 0 or current_price <= 0:
         return None
 
-    lo, hi = -10.0, 40.0
-    for _ in range(40):
+    lo, hi = _REVERSE_DCF_LO, _REVERSE_DCF_HI
+    for _ in range(50):
         mid = (lo + hi) / 2
-        # Simplified DCF per share
-        pv = 0
+        pv = 0.0
         fcf = fcf_per_share_latest
         for y in range(1, years + 1):
             fcf *= (1 + mid / 100)
             pv += fcf / (1 + wacc / 100) ** y
-        terminal = fcf * (1 + terminal_growth / 100) / (wacc / 100 - terminal_growth / 100)
-        pv += terminal / (1 + wacc / 100) ** years
+        if wacc / 100 > terminal_growth / 100:
+            terminal = fcf * (1 + terminal_growth / 100) / (wacc / 100 - terminal_growth / 100)
+            pv += terminal / (1 + wacc / 100) ** years
         if pv > current_price:
             hi = mid
         else:
             lo = mid
-    return (lo + hi) / 2
+
+    answer = (lo + hi) / 2
+    # Converged at a bracket bound → answer is unreliable
+    if (answer - _REVERSE_DCF_LO) < _REVERSE_DCF_BOUNDARY_EPS:
+        return None
+    if (_REVERSE_DCF_HI - answer) < _REVERSE_DCF_BOUNDARY_EPS:
+        return None
+    return answer
 
 
 def _monte_carlo(

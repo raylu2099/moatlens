@@ -78,6 +78,7 @@ def run(
     cfg: Config, keys: ApiKeys, ticker: str,
     anchor_thesis: str,
     prior_stages_summary: dict,
+    my_variant_view: str = "",
 ) -> StageResult:
     t0 = time.time()
 
@@ -86,12 +87,18 @@ def run(
     except FileNotFoundError:
         system_prompt, prompt_version = _LEGACY_SYSTEM_PROMPT, "inline-fallback"
 
+    variant_block = (
+        f"\n\n# 用户的非共识观点 (my variant view)\n{my_variant_view}\n"
+        "在 variant_view.my_difference 中必须**明确引用或评估**用户这段话，并在"
+        "if_i_right 中说明若用户这个差异是正确的，未来 3 年价格会怎么演化。"
+    ) if my_variant_view else ""
+
     user_prompt = f"""# 审视对象
 Ticker: {ticker}
 
 # 用户初始论点
 {anchor_thesis or "(未提供)"}
-
+{variant_block}
 # 前面 7 阶段的判断摘要
 
 ## Stage 3 护城河（摘要）

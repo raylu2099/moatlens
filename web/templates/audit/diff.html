@@ -1,10 +1,10 @@
 {% extends "base.html" %}
-{% block title %}{{ ticker }} diff — Moatlens{% endblock %}
+{% block title %}{{ ticker }} 差异 — Moatlens{% endblock %}
 {% block content %}
 
 <div class="flex justify-between items-start mb-6">
     <div>
-        <h1 class="text-2xl font-bold">{{ ticker }} — thesis diff</h1>
+        <h1 class="text-2xl font-bold">{{ ticker }} — thesis 演化</h1>
         <p class="text-sm text-gray-500">
             <span class="text-gray-400">{{ previous_date }}</span>
             <span class="text-gray-600 mx-2">→</span>
@@ -12,14 +12,14 @@
         </p>
     </div>
     <div class="text-right">
-        <a href="/audit/{{ ticker }}/{{ current_date }}" class="text-xs text-gray-400 hover:text-white">Latest report →</a>
+        <a href="/audit/{{ ticker }}/{{ current_date }}" class="text-xs text-gray-400 hover:text-white">最新报告 →</a>
     </div>
 </div>
 
 {{ diff_html | safe }}
 
 <div class="mt-6 text-xs text-gray-600">
-    <em>Use this view to sanity-check whether a previous thesis still holds — has the moat actually weakened? Did an earlier failure mode show up?</em>
+    <em>用这个视图检查：之前的 thesis 还成立吗？护城河真的弱化了吗？之前列的失败模式是否正在浮现？</em>
 </div>
 
 {% endblock %}

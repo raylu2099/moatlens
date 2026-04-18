@@ -1,0 +1,81 @@
+{% extends "base.html" %}
+{% block title %}持仓 — Moatlens{% endblock %}
+{% block content %}
+
+<div class="flex justify-between items-center mb-6">
+    <h1 class="text-2xl font-bold">持仓看板</h1>
+    <div class="text-sm text-gray-500">{{ rows | length }} 只</div>
+</div>
+
+{% if not rows %}
+<div class="bg-ink-800 border border-ink-700 rounded-lg p-6 text-center text-gray-400">
+    <p class="mb-2">还没有标记任何持仓。</p>
+    <p class="text-sm text-gray-500">在终端用：</p>
+    <pre class="bg-ink-900 inline-block px-4 py-2 mt-2 rounded text-xs text-gray-300">python -m cli hold add AAPL --size "5%"</pre>
+</div>
+{% else %}
+<table class="w-full text-sm bg-ink-800 border border-ink-700 rounded-lg overflow-hidden">
+    <thead class="bg-ink-700 text-gray-400 text-xs uppercase">
+        <tr>
+            <th class="text-left px-4 py-2">Ticker</th>
+            <th class="text-right px-4 py-2">当前价</th>
+            <th class="text-right px-4 py-2">理想买入</th>
+            <th class="text-right px-4 py-2">开始减仓</th>
+            <th class="text-center px-4 py-2">安全边际</th>
+            <th class="text-left px-4 py-2">Audit 日期</th>
+            <th class="text-left px-4 py-2">Age</th>
+            <th class="text-left px-4 py-2">仓位</th>
+            <th class="text-left px-4 py-2">状态</th>
+        </tr>
+    </thead>
+    <tbody>
+    {% for r in rows %}
+        <tr class="border-t border-ink-700 hover:bg-ink-700/30">
+            <td class="px-4 py-3">
+                {% if r.audit_date %}
+                <a href="/audit/{{ r.ticker }}/{{ r.audit_date }}" class="text-gold font-medium">{{ r.ticker }}</a>
+                {% else %}
+                <span class="text-gold">{{ r.ticker }}</span>
+                {% endif %}
+            </td>
+            <td class="px-4 py-3 text-right font-mono">{% if r.price %}${{ "%.2f"|format(r.price) }}{% else %}—{% endif %}</td>
+            <td class="px-4 py-3 text-right font-mono text-green-400">{% if r.target_buy %}≤ ${{ "%.2f"|format(r.target_buy) }}{% else %}—{% endif %}</td>
+            <td class="px-4 py-3 text-right font-mono text-red-400">{% if r.target_sell %}≥ ${{ "%.2f"|format(r.target_sell) }}{% else %}—{% endif %}</td>
+            <td class="px-4 py-3 text-center font-mono {% if r.mos_pct is not none and r.mos_pct >= 30 %}text-green-400{% elif r.mos_pct is not none and r.mos_pct < 0 %}text-red-400{% else %}text-gray-400{% endif %}">
+                {% if r.mos_pct is not none %}{{ "%.1f"|format(r.mos_pct) }}%{% else %}—{% endif %}
+            </td>
+            <td class="px-4 py-3 text-gray-400">{{ r.audit_date or "—" }}</td>
+            <td class="px-4 py-3 text-xs">
+                {% if r.stale_level == 'very_stale' %}
+                    <span class="text-red-400">{{ r.age_days }}d ⚠</span>
+                {% elif r.stale_level == 'stale' %}
+                    <span class="text-yellow-400">{{ r.age_days }}d</span>
+                {% elif r.age_days is not none %}
+                    <span class="text-gray-500">{{ r.age_days }}d</span>
+                {% else %}
+                    <span class="text-red-400">缺 audit</span>
+                {% endif %}
+            </td>
+            <td class="px-4 py-3 text-gray-400">{{ r.size or "—" }}</td>
+            <td class="px-4 py-3">
+                {% if r.status == 'buy_zone' %}
+                    <span class="bg-green-900/50 text-green-300 px-2 py-0.5 rounded text-xs">🟢 加仓区</span>
+                {% elif r.status == 'sell_zone' %}
+                    <span class="bg-red-900/50 text-red-300 px-2 py-0.5 rounded text-xs">🔴 减仓区</span>
+                {% elif r.status == 'hold' %}
+                    <span class="bg-yellow-900/50 text-yellow-300 px-2 py-0.5 rounded text-xs">🟡 持有</span>
+                {% else %}
+                    <span class="text-gray-500 text-xs">—</span>
+                {% endif %}
+            </td>
+        </tr>
+    {% endfor %}
+    </tbody>
+</table>
+{% endif %}
+
+<p class="mt-6 text-xs text-gray-500">
+    ★ "缺 audit" 表示这只标为持仓但从未 audit —— 用 <code class="bg-ink-800 px-1">python -m cli audit &lt;TICKER&gt;</code> 补上。
+</p>
+
+{% endblock %}

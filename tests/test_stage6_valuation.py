@@ -160,6 +160,34 @@ def test_reverse_dcf_higher_price_implies_higher_growth():
     assert rich > cheap
 
 
+def test_reverse_dcf_returns_none_when_boundary_hit():
+    """
+    Meme-stock scenario: price is so absurdly high that no growth inside our
+    sensible bracket can reproduce it. Function must return None, not a
+    falsely-confident number stuck at the 100% ceiling.
+    """
+    wacc, tg, years = 10, 2.5, 10
+    implied = _reverse_dcf_implied_growth(
+        current_price=1_000_000, fcf_per_share_latest=0.01,
+        wacc=wacc, terminal_growth=tg, years=years,
+    )
+    assert implied is None
+
+
+def test_reverse_dcf_returns_none_when_lower_bound_hit():
+    """
+    Distressed stock: price below any sensible DCF even at -20% growth →
+    must return None rather than clamp to -20%.
+    """
+    wacc, tg, years = 10, 2.5, 10
+    # Extremely low price relative to fcf → implied growth would be < -20%
+    implied = _reverse_dcf_implied_growth(
+        current_price=0.01, fcf_per_share_latest=100,
+        wacc=wacc, terminal_growth=tg, years=years,
+    )
+    assert implied is None
+
+
 # =========================================================================
 # Monte Carlo
 # =========================================================================
