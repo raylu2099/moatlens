@@ -22,6 +22,7 @@ import time
 from datetime import datetime
 
 from engine.models import StageResult, Verdict
+from engine.prompts_loader import load_prompt
 from engine.providers import claude as p_claude
 from engine.providers import financial_datasets as fd
 from engine.providers import perplexity as p_pplx
@@ -33,6 +34,7 @@ from ._helpers import aggregate_verdict, make_metric
 
 STAGE_ID = 4
 STAGE_NAME = "管理层 & 资本配置"
+PROMPT_SLUG = "s4_capital"
 
 
 def _buffett_dollar_test(income_periods: list[dict], current_market_cap: float) -> dict:
@@ -61,7 +63,7 @@ def _buffett_dollar_test(income_periods: list[dict], current_market_cap: float) 
     return {"retained": retained, "note": "retained earnings negative or zero"}
 
 
-SYSTEM_PROMPT = """你是一位分析上市公司管理层与资本配置能力的资深分析师。
+_LEGACY_SYSTEM_PROMPT = """你是一位分析上市公司管理层与资本配置能力的资深分析师。
 应用 Warren Buffett 的评估框架，特别看重：
 1. 管理层诚信（股东信坦诚度、是否承认错误、是否解释经营细节）
 2. 资本分配记录（回购时机 = 低 PE 还是高 PE、并购整合能力、股息政策）
@@ -103,6 +105,11 @@ def run(
     multiples = yfp.fetch_multiples(ticker)
     company = yfp.fetch_company_info(ticker)
     company_name = company.get("long_name", ticker)
+
+    try:
+        system_prompt, prompt_version = load_prompt(cfg, PROMPT_SLUG)
+    except FileNotFoundError:
+        system_prompt, prompt_version = _LEGACY_SYSTEM_PROMPT, "inline-fallback"
 
     metrics = []
     findings = []
@@ -181,7 +188,7 @@ def run(
 请严格按系统提示词的 JSON 格式输出。"""
 
     claude_output, claude_cost = p_claude.analyze(
-        cfg, keys, SYSTEM_PROMPT, user_prompt, max_tokens=2000,
+        cfg, keys, system_prompt, user_prompt, max_tokens=2000,
     )
 
     parsed = {}
@@ -228,6 +235,8 @@ def run(
             "claude_parsed": parsed,
             "perplexity_research": research_text,
             "cost_usd": claude_cost + pplx_cost,
+            "prompt_slug": PROMPT_SLUG,
+            "prompt_version": prompt_version,
         },
         elapsed_seconds=time.time() - t0,
     )

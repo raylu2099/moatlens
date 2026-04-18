@@ -1,15 +1,19 @@
 """
 Orchestrator — runs the 8-stage audit.
 
-Two modes:
-- run_audit_auto(): run all stages, no user interaction (for batch/API/web)
-- run_audit_wizard(): yields StageResult after each stage for interactive
-  approval (CLI wizard)
+Two modes (single code path, different consumption):
+- run_audit_auto(): run all stages, return full report (callback per stage)
+- run_audit_wizard(): generator yielding after each stage (CLI interactive)
 
-Supports resume from partial audit via saved AuditReport checkpoint.
+Hardening:
+- Per-stage exceptions become Verdict.SKIP with the reason in findings —
+  one bad stage no longer crashes the whole audit.
+- --resume support via resume_from: caller passes an AuditReport with
+  partial stages; orchestrator continues from the next stage.
 """
 from __future__ import annotations
 
+import traceback
 from datetime import datetime
 from typing import Callable, Generator
 
@@ -23,15 +27,41 @@ from engine.stages import (
 from shared.config import ApiKeys, Config
 
 
-STAGES = [
-    ("s1", s1_competence.run),
-    ("s2", s2_integrity.run),
-    ("s3", s3_moat.run),
-    ("s4", s4_capital.run),
-    ("s5", s5_owner_earnings.run),
-    ("s6", s6_valuation.run),
-    ("s7", s7_safety.run),
-    ("s8", s8_inversion.run),
+def _stage1(cfg, keys, ticker, tech_mode, prior):
+    return s1_competence.run(cfg, keys, ticker, tech_mode=tech_mode)
+
+def _stage2(cfg, keys, ticker, tech_mode, prior):
+    return s2_integrity.run(cfg, keys, ticker)
+
+def _stage3(cfg, keys, ticker, tech_mode, prior):
+    return s3_moat.run(cfg, keys, ticker, prior.get(1, {}), tech_mode=tech_mode)
+
+def _stage4(cfg, keys, ticker, tech_mode, prior):
+    return s4_capital.run(cfg, keys, ticker, prior.get(1, {}))
+
+def _stage5(cfg, keys, ticker, tech_mode, prior):
+    return s5_owner_earnings.run(cfg, keys, ticker, tech_mode=tech_mode)
+
+def _stage6(cfg, keys, ticker, tech_mode, prior):
+    return s6_valuation.run(cfg, keys, ticker, tech_mode=tech_mode)
+
+def _stage7(cfg, keys, ticker, tech_mode, prior):
+    return s7_safety.run(cfg, keys, ticker, prior.get(6, {}))
+
+def _stage8(cfg, keys, ticker, tech_mode, prior, anchor_thesis=""):
+    prior_for_s8 = {f"stage{k}": v for k, v in prior.items() if k in (3, 4, 6, 7)}
+    return s8_inversion.run(cfg, keys, ticker, anchor_thesis, prior_for_s8)
+
+
+STAGES: list[tuple[int, Callable]] = [
+    (1, _stage1),
+    (2, _stage2),
+    (3, _stage3),
+    (4, _stage4),
+    (5, _stage5),
+    (6, _stage6),
+    (7, _stage7),
+    (8, _stage8),
 ]
 
 
@@ -47,12 +77,9 @@ def _new_report(ticker: str, anchor_thesis: str = "") -> AuditReport:
 
 
 def _compute_final_verdict(report: AuditReport) -> tuple[Action, ConfidenceLevel]:
-    """Roll up 8 stages into final action + confidence."""
     pass_count = sum(1 for s in report.stages if s.verdict == Verdict.PASS)
     fail_count = sum(1 for s in report.stages if s.verdict == Verdict.FAIL)
-    total = len([s for s in report.stages if s.verdict != Verdict.SKIP])
 
-    # Critical stages: 1, 2, 7 failing = AVOID
     critical_stages = {1, 2, 7}
     critical_fail = any(
         s.stage_id in critical_stages and s.verdict == Verdict.FAIL
@@ -62,7 +89,6 @@ def _compute_final_verdict(report: AuditReport) -> tuple[Action, ConfidenceLevel
     if critical_fail or fail_count >= 3:
         action = Action.AVOID
     elif pass_count >= 6:
-        # Check margin of safety from stage 7
         s7 = next((s for s in report.stages if s.stage_id == 7), None)
         mos = s7.raw_data.get("margin_of_safety_pct", 0) if s7 else 0
         if mos >= 30:
@@ -74,7 +100,6 @@ def _compute_final_verdict(report: AuditReport) -> tuple[Action, ConfidenceLevel
     else:
         action = Action.WATCH
 
-    # Confidence
     if pass_count >= 7 and fail_count == 0:
         confidence = ConfidenceLevel.HIGH
     elif fail_count >= 2:
@@ -86,7 +111,6 @@ def _compute_final_verdict(report: AuditReport) -> tuple[Action, ConfidenceLevel
 
 
 def _build_thesis(report: AuditReport) -> Thesis:
-    """Populate Thesis from final audit results."""
     s7 = next((s for s in report.stages if s.stage_id == 7), None)
     s3 = next((s for s in report.stages if s.stage_id == 3), None)
     s4 = next((s for s in report.stages if s.stage_id == 4), None)
@@ -123,162 +147,89 @@ def _build_thesis(report: AuditReport) -> Thesis:
     )
 
 
+def _track_cost(report: AuditReport, stage: StageResult) -> None:
+    cost = stage.raw_data.get("cost_usd", 0) or 0
+    report.total_api_cost_usd += cost
+    report.provider_costs[f"stage{stage.stage_id}"] = cost
+
+
+def _run_stage_safe(
+    stage_id: int, fn: Callable, cfg, keys, ticker, tech_mode, prior, anchor_thesis,
+) -> StageResult:
+    """Run a stage with a hard safety net — any exception becomes SKIP."""
+    try:
+        if stage_id == 8:
+            return fn(cfg, keys, ticker, tech_mode, prior, anchor_thesis=anchor_thesis)
+        return fn(cfg, keys, ticker, tech_mode, prior)
+    except Exception as e:
+        tb = traceback.format_exc(limit=3)
+        return StageResult(
+            stage_id=stage_id,
+            stage_name=f"Stage {stage_id}",
+            verdict=Verdict.SKIP,
+            findings=[f"⚠️ Stage raised {type(e).__name__}: {e}", f"```\n{tb}\n```"],
+            raw_data={"error": str(e), "error_type": type(e).__name__},
+        )
+
+
+def _finalize(report: AuditReport) -> AuditReport:
+    report.overall_action, report.overall_confidence = _compute_final_verdict(report)
+    report.thesis = _build_thesis(report)
+    s8 = next((s for s in report.stages if s.stage_id == 8), None)
+    if s8 and s8.raw_data.get("failure_modes"):
+        report.inversion_failure_modes = [
+            fm.get("scenario", "") for fm in s8.raw_data["failure_modes"]
+        ]
+    if s8 and s8.raw_data.get("variant_view"):
+        report.variant_view = s8.raw_data["variant_view"]
+    return report
+
+
 def run_audit_auto(
     cfg: Config, keys: ApiKeys, ticker: str,
     anchor_thesis: str = "",
     tech_mode: bool = False,
     progress_callback: Callable[[int, StageResult], None] | None = None,
+    resume_from: AuditReport | None = None,
 ) -> AuditReport:
-    """Run all 8 stages without user interaction. Returns full report."""
-    report = _new_report(ticker, anchor_thesis)
+    """Run all 8 stages. If resume_from is provided, skip stages already in it."""
+    report = resume_from or _new_report(ticker, anchor_thesis)
+    done_ids = {s.stage_id for s in report.stages}
+    prior = {s.stage_id: s.raw_data for s in report.stages}
 
-    # Stage 1
-    s1 = s1_competence.run(cfg, keys, ticker, tech_mode=tech_mode)
-    report.stages.append(s1)
-    _track_cost(report, s1)
-    if progress_callback: progress_callback(1, s1)
+    for sid, fn in STAGES:
+        if sid in done_ids:
+            continue
+        result = _run_stage_safe(sid, fn, cfg, keys, ticker, tech_mode, prior, anchor_thesis)
+        report.stages.append(result)
+        _track_cost(report, result)
+        prior[sid] = result.raw_data
+        if progress_callback:
+            progress_callback(sid, result)
 
-    # Stage 2
-    s2 = s2_integrity.run(cfg, keys, ticker)
-    report.stages.append(s2)
-    _track_cost(report, s2)
-    if progress_callback: progress_callback(2, s2)
-
-    # Stage 3
-    s3 = s3_moat.run(cfg, keys, ticker, s1.raw_data, tech_mode=tech_mode)
-    report.stages.append(s3)
-    _track_cost(report, s3)
-    if progress_callback: progress_callback(3, s3)
-
-    # Stage 4
-    s4 = s4_capital.run(cfg, keys, ticker, s1.raw_data)
-    report.stages.append(s4)
-    _track_cost(report, s4)
-    if progress_callback: progress_callback(4, s4)
-
-    # Stage 5
-    s5 = s5_owner_earnings.run(cfg, keys, ticker, tech_mode=tech_mode)
-    report.stages.append(s5)
-    _track_cost(report, s5)
-    if progress_callback: progress_callback(5, s5)
-
-    # Stage 6
-    s6 = s6_valuation.run(cfg, keys, ticker, tech_mode=tech_mode)
-    report.stages.append(s6)
-    _track_cost(report, s6)
-    if progress_callback: progress_callback(6, s6)
-
-    # Stage 7
-    s7 = s7_safety.run(cfg, keys, ticker, s6.raw_data)
-    report.stages.append(s7)
-    _track_cost(report, s7)
-    if progress_callback: progress_callback(7, s7)
-
-    # Stage 8
-    prior = {
-        f"stage{s.stage_id}": s.raw_data
-        for s in [s3, s4, s6, s7]
-    }
-    s8 = s8_inversion.run(cfg, keys, ticker, anchor_thesis, prior)
-    report.stages.append(s8)
-    _track_cost(report, s8)
-    if progress_callback: progress_callback(8, s8)
-
-    # Final verdict
-    report.overall_action, report.overall_confidence = _compute_final_verdict(report)
-    report.thesis = _build_thesis(report)
-
-    # Collect inversion failure modes
-    if s8.raw_data.get("failure_modes"):
-        report.inversion_failure_modes = [
-            fm.get("scenario", "") for fm in s8.raw_data["failure_modes"]
-        ]
-    if s8.raw_data.get("variant_view"):
-        report.variant_view = s8.raw_data["variant_view"]
-
-    return report
+    return _finalize(report)
 
 
 def run_audit_wizard(
     cfg: Config, keys: ApiKeys, ticker: str,
     anchor_thesis: str = "",
     tech_mode: bool = False,
+    resume_from: AuditReport | None = None,
 ) -> Generator[tuple[int, StageResult, AuditReport], bool, AuditReport]:
-    """
-    Interactive wizard: yields (stage_num, result, partial_report) after each stage.
-    Caller sends True to continue, False to abort.
-    """
-    report = _new_report(ticker, anchor_thesis)
+    """Interactive wizard: yield after each stage; caller sends True/False to continue."""
+    report = resume_from or _new_report(ticker, anchor_thesis)
+    done_ids = {s.stage_id for s in report.stages}
+    prior = {s.stage_id: s.raw_data for s in report.stages}
 
-    # Stage 1
-    s1 = s1_competence.run(cfg, keys, ticker, tech_mode=tech_mode)
-    report.stages.append(s1)
-    _track_cost(report, s1)
-    cont = yield 1, s1, report
-    if not cont: return report
+    for sid, fn in STAGES:
+        if sid in done_ids:
+            continue
+        result = _run_stage_safe(sid, fn, cfg, keys, ticker, tech_mode, prior, anchor_thesis)
+        report.stages.append(result)
+        _track_cost(report, result)
+        prior[sid] = result.raw_data
+        cont = yield sid, result, report
+        if cont is False:
+            return report
 
-    # Stage 2
-    s2 = s2_integrity.run(cfg, keys, ticker)
-    report.stages.append(s2)
-    _track_cost(report, s2)
-    cont = yield 2, s2, report
-    if not cont: return report
-
-    # Stage 3
-    s3 = s3_moat.run(cfg, keys, ticker, s1.raw_data, tech_mode=tech_mode)
-    report.stages.append(s3)
-    _track_cost(report, s3)
-    cont = yield 3, s3, report
-    if not cont: return report
-
-    # Stage 4
-    s4 = s4_capital.run(cfg, keys, ticker, s1.raw_data)
-    report.stages.append(s4)
-    _track_cost(report, s4)
-    cont = yield 4, s4, report
-    if not cont: return report
-
-    # Stage 5
-    s5 = s5_owner_earnings.run(cfg, keys, ticker, tech_mode=tech_mode)
-    report.stages.append(s5)
-    _track_cost(report, s5)
-    cont = yield 5, s5, report
-    if not cont: return report
-
-    # Stage 6
-    s6 = s6_valuation.run(cfg, keys, ticker, tech_mode=tech_mode)
-    report.stages.append(s6)
-    _track_cost(report, s6)
-    cont = yield 6, s6, report
-    if not cont: return report
-
-    # Stage 7
-    s7 = s7_safety.run(cfg, keys, ticker, s6.raw_data)
-    report.stages.append(s7)
-    _track_cost(report, s7)
-    cont = yield 7, s7, report
-    if not cont: return report
-
-    # Stage 8
-    prior = {f"stage{s.stage_id}": s.raw_data for s in [s3, s4, s6, s7]}
-    s8 = s8_inversion.run(cfg, keys, ticker, anchor_thesis, prior)
-    report.stages.append(s8)
-    _track_cost(report, s8)
-    yield 8, s8, report
-
-    # Finalize
-    report.overall_action, report.overall_confidence = _compute_final_verdict(report)
-    report.thesis = _build_thesis(report)
-    if s8.raw_data.get("failure_modes"):
-        report.inversion_failure_modes = [fm.get("scenario", "") for fm in s8.raw_data["failure_modes"]]
-    if s8.raw_data.get("variant_view"):
-        report.variant_view = s8.raw_data["variant_view"]
-
-    return report
-
-
-def _track_cost(report: AuditReport, stage: StageResult) -> None:
-    cost = stage.raw_data.get("cost_usd", 0) or 0
-    report.total_api_cost_usd += cost
-    key = f"stage{stage.stage_id}"
-    report.provider_costs[key] = cost
+    return _finalize(report)

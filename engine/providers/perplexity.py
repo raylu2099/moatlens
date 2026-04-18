@@ -1,19 +1,16 @@
 """
 Perplexity search — qualitative research provider.
 
-Used for:
-- CEO shareholder letter highlights (for management assessment)
-- Channel checks / product reviews (moat depth validation)
-- Recent news summaries (not short-term sentiment, but material changes)
-- "Variant View" — what does the market think?
-
 Model constraint: ONLY `sonar` and `sonar-pro`. Never `sonar-reasoning-pro`
 or `sonar-deep-research` (too expensive for this use case).
+
+Retries on transient errors (429/5xx/timeouts) with exponential backoff.
 """
 from __future__ import annotations
 
 import json
 import sys
+import time
 
 import requests
 
@@ -24,6 +21,10 @@ from shared.config import ApiKeys, Config
 PPLX_ENDPOINT = "https://api.perplexity.ai/chat/completions"
 
 
+class PerplexityError(RuntimeError):
+    pass
+
+
 def _call(
     keys: ApiKeys,
     prompt: str,
@@ -31,7 +32,9 @@ def _call(
     max_tokens: int = 600,
     recency: str | None = None,
     domain_filter: list[str] | None = None,
+    max_retries: int = 2,
 ) -> dict:
+    """HTTP call with retry. Returns a dict with either data or {"error": msg}."""
     if not keys.perplexity:
         return {"error": "PERPLEXITY_API_KEY missing"}
 
@@ -47,20 +50,35 @@ def _call(
     if domain_filter:
         body["search_domain_filter"] = domain_filter
 
-    try:
-        r = requests.post(
-            PPLX_ENDPOINT,
-            headers={
-                "Authorization": f"Bearer {keys.perplexity}",
-                "Content-Type": "application/json",
-            },
-            data=json.dumps(body),
-            timeout=60,
-        )
-        return r.json()
-    except Exception as e:
-        print(f"[perplexity] error: {e}", file=sys.stderr)
-        return {"error": str(e)}
+    last_err: str = ""
+    for attempt in range(max_retries + 1):
+        try:
+            r = requests.post(
+                PPLX_ENDPOINT,
+                headers={
+                    "Authorization": f"Bearer {keys.perplexity}",
+                    "Content-Type": "application/json",
+                },
+                data=json.dumps(body),
+                timeout=60,
+            )
+            if r.status_code in (408, 429, 500, 502, 503, 504):
+                last_err = f"HTTP {r.status_code}: {r.text[:150]}"
+                if attempt < max_retries:
+                    time.sleep(1.5 ** attempt)
+                    continue
+                return {"error": last_err}
+            if r.status_code != 200:
+                return {"error": f"HTTP {r.status_code}: {r.text[:200]}"}
+            return r.json()
+        except requests.RequestException as e:
+            last_err = f"{type(e).__name__}: {e}"
+            if attempt < max_retries:
+                time.sleep(1.5 ** attempt)
+                continue
+            print(f"[perplexity] {last_err}", file=sys.stderr)
+            return {"error": last_err}
+    return {"error": last_err or "unknown"}
 
 
 def research(
@@ -104,7 +122,7 @@ def research(
 def test_connection(keys: ApiKeys) -> tuple[bool, str]:
     if not keys.perplexity:
         return False, "PERPLEXITY_API_KEY not set"
-    data = _call(keys, "Reply with exactly: OK", max_tokens=10, recency=None)
+    data = _call(keys, "Reply with exactly: OK", max_tokens=10, recency=None, max_retries=0)
     if "error" in data:
         return False, data["error"]
     choices = data.get("choices", [])

@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+{% block title %}{{ ticker }} diff — Moatlens{% endblock %}
+{% block content %}
+
+<div class="flex justify-between items-start mb-6">
+    <div>
+        <h1 class="text-2xl font-bold">{{ ticker }} — thesis diff</h1>
+        <p class="text-sm text-gray-500">
+            <span class="text-gray-400">{{ previous_date }}</span>
+            <span class="text-gray-600 mx-2">→</span>
+            <span class="text-gold">{{ current_date }}</span>
+        </p>
+    </div>
+    <div class="text-right">
+        <a href="/audit/{{ ticker }}/{{ current_date }}" class="text-xs text-gray-400 hover:text-white">Latest report →</a>
+    </div>
+</div>
+
+{{ diff_html | safe }}
+
+<div class="mt-6 text-xs text-gray-600">
+    <em>Use this view to sanity-check whether a previous thesis still holds — has the moat actually weakened? Did an earlier failure mode show up?</em>
+</div>
+
+{% endblock %}

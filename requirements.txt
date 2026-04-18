@@ -8,21 +8,16 @@ python-dotenv>=1.0.0
 requests>=2.31.0
 yfinance>=0.2.40
 anthropic>=0.40.0
-trafilatura>=1.12.0
 
-# Numeric / financial
+# Numeric
 numpy>=1.24.0
-scipy>=1.11.0
-pandas>=2.1.0
 
-# Web framework
+# Web framework (single-user, local only)
 fastapi>=0.115.0
 uvicorn[standard]>=0.32.0
 jinja2>=3.1.0
 python-multipart>=0.0.9
-itsdangerous>=2.1.0
-passlib[bcrypt]>=1.7.4
-cryptography>=42.0.0
+markdown>=3.6
 
 # CLI UX
 rich>=13.7.0
@@ -30,4 +25,3 @@ typer>=0.12.0
 
 # Dev
 pytest>=7.0.0
-pytest-asyncio>=0.23.0

@@ -3,14 +3,19 @@ version: '3.8'
 services:
   web:
     build: .
+    # Localhost-only binding on the host (single-user).
+    # If you want to reach it over Tailscale, bind to the tailnet IP instead.
     ports:
-      - "8502:8000"
+      - "127.0.0.1:8502:8000"
     volumes:
       - ./data:/app/data
       - ./logs:/app/logs
       - ./.env:/app/.env:ro
-      - ./demo:/app/demo:ro
       - ./docs:/app/docs:ro
+      - ./prompts:/app/prompts:ro
     environment:
       - PYTHONUNBUFFERED=1
+    # Override the image CMD so uvicorn binds to 0.0.0.0 *inside* the container
+    # (container port is mapped to 127.0.0.1 on the host — still private).
+    command: ["uvicorn", "web.main:app", "--host", "0.0.0.0", "--port", "8000"]
     restart: unless-stopped

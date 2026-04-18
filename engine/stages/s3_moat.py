@@ -27,6 +27,7 @@ import json
 import time
 
 from engine.models import LensAnalysis, StageResult, Verdict
+from engine.prompts_loader import load_prompt
 from engine.providers import claude as p_claude
 from engine.providers import perplexity as p_pplx
 from engine.providers import yfinance_provider as yfp
@@ -37,9 +38,10 @@ from ._helpers import aggregate_verdict, make_metric
 
 STAGE_ID = 3
 STAGE_NAME = "护城河深度验证"
+PROMPT_SLUG = "s3_moat"
 
 
-SYSTEM_PROMPT = """你是一位严格遵循 Charlie Munger 与 Warren Buffett 框架的资深分析师。
+_LEGACY_SYSTEM_PROMPT = """你是一位严格遵循 Charlie Munger 与 Warren Buffett 框架的资深分析师。
 
 你的任务：评估一家上市公司的护城河（competitive moat）深度与持久性。
 
@@ -128,6 +130,12 @@ def run(
     industry = company.get("industry", "")
     biz_summary = company.get("business_summary", "")
 
+    # Load externalized prompt (falls back to legacy inline copy on filesystem issues).
+    try:
+        system_prompt, prompt_version = load_prompt(cfg, PROMPT_SLUG)
+    except FileNotFoundError:
+        system_prompt, prompt_version = _LEGACY_SYSTEM_PROMPT, "inline-fallback"
+
     # --- Perplexity research on competitive position ---
     research_prompt = (
         f"Analyze the competitive moat of {company_name} ({ticker}). "
@@ -160,7 +168,7 @@ def run(
 根据以上信息，按系统提示词的格式输出 JSON。"""
 
     claude_output, claude_cost = p_claude.analyze(
-        cfg, keys, SYSTEM_PROMPT, user_prompt, max_tokens=3000,
+        cfg, keys, system_prompt, user_prompt, max_tokens=3000,
     )
 
     # Parse JSON
@@ -225,6 +233,8 @@ def run(
             "perplexity_research": research_text,
             "perplexity_sources": sources[:10],
             "cost_usd": claude_cost + pplx_cost,
+            "prompt_slug": PROMPT_SLUG,
+            "prompt_version": prompt_version,
         },
         elapsed_seconds=time.time() - t0,
     )

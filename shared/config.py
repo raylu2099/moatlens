@@ -1,7 +1,7 @@
 """
 Configuration loader. Reads .env, exposes typed config.
-BYOK model: each user can have their own set of keys in the DB (web mode)
-or in process env (CLI mode).
+
+Single-user mode: keys come from process env (loaded from .env).
 """
 from __future__ import annotations
 
@@ -18,14 +18,12 @@ load_dotenv(PROJECT_ROOT / ".env")
 
 @dataclass(frozen=True)
 class ApiKeys:
-    """Per-invocation API keys — can come from env (CLI) or DB (web)."""
     anthropic: str = ""
     perplexity: str = ""
     financial_datasets: str = ""
     fred: str = ""
 
     def has_required(self) -> tuple[bool, list[str]]:
-        """Return (all_present, list_of_missing)."""
         missing = []
         if not self.anthropic:
             missing.append("ANTHROPIC_API_KEY")
@@ -33,7 +31,6 @@ class ApiKeys:
             missing.append("PERPLEXITY_API_KEY")
         if not self.financial_datasets:
             missing.append("FINANCIAL_DATASETS_API_KEY")
-        # FRED is optional (graceful fallback)
         return len(missing) == 0, missing
 
 
@@ -41,7 +38,6 @@ class ApiKeys:
 class Config:
     data_dir: Path
     cache_dir: Path
-    demo_dir: Path
     prompts_dir: Path
     docs_dir: Path
 
@@ -53,9 +49,6 @@ class Config:
     cache_perplexity_ttl: int
     cache_macro_ttl: int
 
-    secret_key: str
-    key_encryption_key: str
-
     project_root: Path
 
 
@@ -66,7 +59,6 @@ def _env(key: str, default: str = "") -> str:
 def load_config() -> Config:
     data_dir = Path(_env("MOATLENS_DATA_DIR", str(PROJECT_ROOT / "data")))
     cache_dir = Path(_env("MOATLENS_CACHE_DIR", str(PROJECT_ROOT / "data" / "cache")))
-    demo_dir = PROJECT_ROOT / "demo"
     prompts_dir = PROJECT_ROOT / "prompts"
     docs_dir = PROJECT_ROOT / "docs"
 
@@ -76,7 +68,6 @@ def load_config() -> Config:
     return Config(
         data_dir=data_dir,
         cache_dir=cache_dir,
-        demo_dir=demo_dir,
         prompts_dir=prompts_dir,
         docs_dir=docs_dir,
         claude_model=_env("CLAUDE_MODEL", "claude-sonnet-4-5"),
@@ -85,14 +76,11 @@ def load_config() -> Config:
         cache_fundamentals_ttl=int(_env("CACHE_FUNDAMENTALS_TTL", "43200")),
         cache_perplexity_ttl=int(_env("CACHE_PERPLEXITY_TTL", "21600")),
         cache_macro_ttl=int(_env("CACHE_MACRO_TTL", "86400")),
-        secret_key=_env("SECRET_KEY", "dev-secret-change-me"),
-        key_encryption_key=_env("KEY_ENCRYPTION_KEY", "dev-encryption-change-me"),
         project_root=PROJECT_ROOT,
     )
 
 
 def load_keys_from_env() -> ApiKeys:
-    """Load BYOK keys from process env (CLI mode). Web mode loads per-user."""
     return ApiKeys(
         anthropic=_env("ANTHROPIC_API_KEY"),
         perplexity=_env("PERPLEXITY_API_KEY"),

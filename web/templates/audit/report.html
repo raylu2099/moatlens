@@ -26,6 +26,10 @@
 </blockquote>
 {% endif %}
 
+{% if diff_html %}
+{{ diff_html | safe }}
+{% endif %}
+
 {% if report.thesis %}
 <div class="bg-ink-800 border border-ink-700 rounded-lg p-5 mb-6">
     <h3 class="text-lg font-semibold text-gold mb-3">💼 Position guidance</h3>

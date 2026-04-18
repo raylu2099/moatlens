@@ -1,13 +1,15 @@
 """
-Moatlens CLI entry point.
+Moatlens CLI.
 
 Usage:
     python -m cli audit AAPL
     python -m cli audit NVDA --tech
-    python -m cli audit TSLA --auto                 # no wizard, run all at once
+    python -m cli audit TSLA --auto
     python -m cli audit NVDA --thesis "CUDA moat + AI cycle"
     python -m cli list
-    python -m cli show NVDA 2026-04-17
+    python -m cli show AAPL 2026-04-17
+    python -m cli diff AAPL
+    python -m cli doctor
 """
 from __future__ import annotations
 
@@ -25,9 +27,11 @@ from rich.table import Table
 
 from engine.models import Verdict
 from engine.orchestrator import run_audit_auto, run_audit_wizard
-from engine.report_renderer import render_markdown, render_summary_line
+from engine.report_renderer import render_markdown
 from shared.config import load_config, load_keys_from_env
-from shared.storage import list_audits, save_audit
+from shared.storage import (
+    audits_dir, list_audits, load_last_two_audits, save_audit,
+)
 
 
 app = typer.Typer(help="Moatlens — Buffett/Munger lens for value investors.")
@@ -60,7 +64,7 @@ def _print_stage(num: int, result) -> None:
         console.print(t)
 
     if result.findings:
-        for f in result.findings[:15]:  # cap to avoid overflow
+        for f in result.findings[:15]:
             console.print(f)
 
     cost = result.raw_data.get("cost_usd", 0)
@@ -72,7 +76,7 @@ def _print_stage(num: int, result) -> None:
 def audit(
     ticker: str,
     auto: bool = typer.Option(False, "--auto", "-a", help="Run all stages without pausing"),
-    tech: bool = typer.Option(False, "--tech", help="Tech stock mode (SBC check, higher PE tolerance)"),
+    tech: bool = typer.Option(False, "--tech", help="Tech stock mode"),
     thesis: str = typer.Option("", "--thesis", "-t", help="Your initial one-sentence thesis"),
 ):
     """Run an 8-stage audit on a ticker."""
@@ -97,17 +101,17 @@ def audit(
         console.print()
         thesis = Prompt.ask(
             "[bold]Before we start, in 2-3 sentences: why is this worth auditing?[/]\n"
-            "[dim](This is your anchor. Claude references it when inverting your thesis.)[/]",
+            "[dim](Your anchor — Claude references it when inverting your thesis.)[/]",
             default="",
         )
 
     if auto:
-        # Auto mode — run everything
         def cb(num, result):
             _print_stage(num, result)
-        report = run_audit_auto(cfg, keys, ticker, anchor_thesis=thesis, tech_mode=tech, progress_callback=cb)
+        report = run_audit_auto(
+            cfg, keys, ticker, anchor_thesis=thesis, tech_mode=tech, progress_callback=cb,
+        )
     else:
-        # Wizard mode — pause after each stage
         gen = run_audit_wizard(cfg, keys, ticker, anchor_thesis=thesis, tech_mode=tech)
         report = None
         try:
@@ -128,7 +132,6 @@ def audit(
         rprint("[red]No report generated.[/]")
         raise typer.Exit(1)
 
-    # Final verdict
     console.print()
     console.rule("[bold magenta]📋 Final Verdict[/]")
     action = report.overall_action.value if report.overall_action else "PENDING"
@@ -140,7 +143,6 @@ def audit(
         border_style="magenta",
     ))
 
-    # Save
     md = render_markdown(report)
     md_path, json_path = save_audit(cfg, report, md)
     console.print(f"\n[dim]Saved:[/]\n  {md_path}\n  {json_path}")
@@ -157,9 +159,10 @@ def list_cmd():
     t = Table(title="Past Audits", show_header=True, header_style="bold cyan")
     t.add_column("Ticker")
     t.add_column("Date")
-    t.add_column("Path")
-    for ticker, date, path in audits[:30]:
-        t.add_row(ticker, date, str(path))
+    t.add_column("Action")
+    t.add_column("Cost", justify="right")
+    for a in audits[:50]:
+        t.add_row(a["ticker"], a["audit_date"], a["action"] or "—", f"${a['total_cost_usd']:.3f}")
     console.print(t)
 
 
@@ -167,7 +170,6 @@ def list_cmd():
 def show(ticker: str, date: str):
     """Display a saved audit report."""
     cfg = load_config()
-    from shared.storage import audits_dir
     md_path = audits_dir(cfg, ticker) / f"{date}.md"
     if not md_path.exists():
         rprint(f"[red]Not found: {md_path}[/]")
@@ -176,8 +178,23 @@ def show(ticker: str, date: str):
 
 
 @app.command()
+def diff(ticker: str):
+    """Compare the two most recent audits of a ticker — how has the thesis evolved?"""
+    from web.diff import render_audit_diff_text
+    cfg = load_config()
+    current, previous = load_last_two_audits(cfg, ticker)
+    if not current:
+        rprint(f"[red]No audits for {ticker.upper()}[/]")
+        raise typer.Exit(1)
+    if not previous:
+        rprint(f"[yellow]Only one audit for {ticker.upper()} ({current.audit_date}). Need 2 to diff.[/]")
+        raise typer.Exit(0)
+    console.print(render_audit_diff_text(current, previous))
+
+
+@app.command()
 def doctor():
-    """Verify BYOK API keys and connectivity."""
+    """Verify API keys and provider connectivity."""
     import subprocess
     subprocess.run([sys.executable, str(Path(__file__).parent.parent / "bin" / "doctor.py")])
 

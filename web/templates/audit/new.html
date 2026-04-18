@@ -7,31 +7,35 @@
 {% if missing_keys %}
 <div class="bg-red-900/20 border border-red-800 rounded p-4 mb-6">
     <div class="font-bold text-red-300 mb-2">Missing API keys</div>
-    <p class="text-sm text-gray-300 mb-3">You need keys for: <strong>{{ missing_keys | join(", ") }}</strong></p>
-    <a href="/settings" class="bg-gold text-ink-900 font-medium px-3 py-1.5 rounded">Add keys →</a>
+    <p class="text-sm text-gray-300 mb-1">Add these to <code>.env</code> in the project root:</p>
+    <ul class="text-sm text-gray-300 list-disc ml-6 mb-2">
+        {% for k in missing_keys %}<li><code>{{ k }}</code></li>{% endfor %}
+    </ul>
+    <p class="text-xs text-gray-500">Template: <code>.env.example</code></p>
 </div>
 {% else %}
-<form method="POST" action="/audit/new" class="space-y-5 max-w-2xl bg-ink-800 border border-ink-700 rounded-lg p-6">
+<form method="POST" action="/audit/new" class="space-y-5 max-w-2xl bg-ink-800 border border-ink-700 rounded-lg p-6"
+      onsubmit="this.setAttribute('data-running', '1'); this.querySelector('button').innerText='Running (3-5 min)... do not close';">
     <div>
-        <label class="block text-sm text-gray-400 mb-1">Ticker (US stocks only for v1)</label>
-        <input name="ticker" required placeholder="e.g. AAPL, NVDA, MSFT" class="w-full bg-ink-900 border border-ink-700 rounded px-3 py-2 text-white font-mono uppercase">
+        <label class="block text-sm text-gray-400 mb-1">Ticker (US stocks)</label>
+        <input name="ticker" required placeholder="AAPL" class="w-full bg-ink-900 border border-ink-700 rounded px-3 py-2 text-white font-mono uppercase">
     </div>
 
     <div>
         <label class="block text-sm text-gray-400 mb-1">
             Your anchor thesis <span class="text-gray-600">(2-3 sentences — why is this worth auditing?)</span>
         </label>
-        <textarea name="anchor_thesis" rows="3" placeholder="This will be your anchor. Claude references it in Stage 8 (inversion) to stress-test." class="w-full bg-ink-900 border border-ink-700 rounded px-3 py-2 text-white"></textarea>
+        <textarea name="anchor_thesis" rows="3" placeholder="This is your anchor. Claude references it in Stage 8 (inversion) to stress-test." class="w-full bg-ink-900 border border-ink-700 rounded px-3 py-2 text-white"></textarea>
     </div>
 
     <div class="flex items-center gap-2">
         <input type="checkbox" id="tech" name="tech_mode" value="1" class="w-4 h-4">
-        <label for="tech" class="text-sm text-gray-300">Tech stock mode <span class="text-gray-500">(adjust for SBC dilution, higher PE tolerance, platform moat types)</span></label>
+        <label for="tech" class="text-sm text-gray-300">Tech stock mode <span class="text-gray-500">(SBC dilution check, higher PE tolerance, platform moat types)</span></label>
     </div>
 
     <div class="border-t border-ink-700 pt-5">
         <div class="text-xs text-gray-500 mb-3">
-            ⏱️ Full audit takes ~3-5 minutes. API cost varies by ticker (~$0.30-$0.80 for Sonnet-4-5). Your keys, your quota.
+            ⏱️ Full audit takes ~3-5 minutes. API cost ~$0.30-$0.80 (Sonnet-4-5 + Perplexity + Financial Datasets). Uses your own keys.
         </div>
         <button type="submit" class="bg-gold hover:bg-yellow-500 text-ink-900 font-bold px-6 py-3 rounded">Run 8-stage audit →</button>
     </div>

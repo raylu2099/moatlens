@@ -69,10 +69,12 @@ def _dupont(income: dict, balance: dict) -> dict:
     total_assets = balance.get("total_assets") or 1
     equity = balance.get("shareholders_equity") or 1
 
-    net_margin = ni / revenue * 100
+    net_margin = ni / revenue * 100     # %
     asset_turnover = revenue / total_assets
     leverage = total_assets / equity
-    roe = net_margin * asset_turnover * leverage / 100
+    # net_margin is already in %, turnover & leverage are unitless ratios →
+    # product is ROE already in %, no extra /100 needed.
+    roe = net_margin * asset_turnover * leverage
 
     return {
         "net_margin_pct": net_margin,

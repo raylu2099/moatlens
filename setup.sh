@@ -48,13 +48,13 @@ if [ ! -f .env ]; then
     echo "Created .env — edit it with your BYOK keys."
 fi
 
-mkdir -p data/cache data/users logs
+mkdir -p data/cache data/audits logs prompts
 echo ""
 echo "=== Setup complete ==="
 echo ""
 echo "Next steps:"
-echo "  1. Edit .env with your API keys (ANTHROPIC, PERPLEXITY, FINANCIAL_DATASETS, FRED)"
+echo "  1. Edit .env with your API keys (ANTHROPIC, PERPLEXITY, FINANCIAL_DATASETS, FRED-optional)"
 echo "  2. Test: python bin/doctor.py"
 echo "  3. CLI:  python -m cli audit AAPL"
-echo "  4. Web:  uvicorn web.main:app --reload --port 8000"
-echo "  5. Docker: docker compose up"
+echo "  4. Web:  uvicorn web.main:app --host 127.0.0.1 --port 8000 --reload"
+echo "  5. Diff: python -m cli diff AAPL"

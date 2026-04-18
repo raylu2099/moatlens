@@ -16,6 +16,7 @@ import json
 import time
 
 from engine.models import StageResult, Verdict
+from engine.prompts_loader import load_prompt
 from engine.providers import claude as p_claude
 from shared.config import ApiKeys, Config
 
@@ -24,9 +25,10 @@ from ._helpers import aggregate_verdict, make_metric
 
 STAGE_ID = 8
 STAGE_NAME = "反方论点 & Variant View"
+PROMPT_SLUG = "s8_inversion"
 
 
-SYSTEM_PROMPT = """你是一位遵循 Charlie Munger "Invert, always invert" 思维的分析师。你的任务：
+_LEGACY_SYSTEM_PROMPT = """你是一位遵循 Charlie Munger "Invert, always invert" 思维的分析师。你的任务：
 
 1. 列出这个投资**最可能失败**的 3-5 种方式。不要给空泛答案（如 "管理层变坏"），要**具体、可追踪**（如 "OpenAI 和 Google 联合推动 CUDA 的替代开源标准，3 年内开发者生态迁移 50%"）。
 
@@ -79,6 +81,11 @@ def run(
 ) -> StageResult:
     t0 = time.time()
 
+    try:
+        system_prompt, prompt_version = load_prompt(cfg, PROMPT_SLUG)
+    except FileNotFoundError:
+        system_prompt, prompt_version = _LEGACY_SYSTEM_PROMPT, "inline-fallback"
+
     user_prompt = f"""# 审视对象
 Ticker: {ticker}
 
@@ -102,7 +109,7 @@ Ticker: {ticker}
 请严格按系统提示词的 JSON 格式输出。"""
 
     claude_output, cost = p_claude.analyze(
-        cfg, keys, SYSTEM_PROMPT, user_prompt, max_tokens=3500,
+        cfg, keys, system_prompt, user_prompt, max_tokens=3500,
     )
 
     parsed = {}
@@ -185,6 +192,8 @@ Ticker: {ticker}
             "failure_modes": failure_modes,
             "variant_view": variant,
             "cost_usd": cost,
+            "prompt_slug": PROMPT_SLUG,
+            "prompt_version": prompt_version,
         },
         elapsed_seconds=time.time() - t0,
     )
