@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+{% block title %}Sign up — Moatlens{% endblock %}
+{% block content %}
+<div class="max-w-md mx-auto mt-12">
+    <h1 class="text-2xl font-bold mb-2">Sign up</h1>
+    <p class="text-sm text-gray-500 mb-6">Free. BYOK. Your keys never leave your encrypted storage.</p>
+    {% if error %}<div class="bg-red-900/30 border border-red-800 text-red-300 p-3 rounded mb-4">{{ error }}</div>{% endif %}
+    <form method="POST" action="/signup" class="space-y-4">
+        <div>
+            <label class="block text-sm text-gray-400 mb-1">Display name (optional)</label>
+            <input name="display_name" type="text" class="w-full bg-ink-800 border border-ink-700 rounded px-3 py-2 text-white">
+        </div>
+        <div>
+            <label class="block text-sm text-gray-400 mb-1">Email</label>
+            <input name="email" type="email" required class="w-full bg-ink-800 border border-ink-700 rounded px-3 py-2 text-white">
+        </div>
+        <div>
+            <label class="block text-sm text-gray-400 mb-1">Password <span class="text-gray-600">(≥ 8 chars)</span></label>
+            <input name="password" type="password" required minlength="8" class="w-full bg-ink-800 border border-ink-700 rounded px-3 py-2 text-white">
+        </div>
+        <button type="submit" class="w-full bg-gold hover:bg-yellow-500 text-ink-900 font-bold py-2 rounded">Create account</button>
+    </form>
+    <p class="text-sm text-gray-400 mt-4 text-center">Already have an account? <a href="/login" class="text-gold">Log in</a></p>
+</div>
+{% endblock %}

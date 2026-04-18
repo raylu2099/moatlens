@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="zh-CN" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}Moatlens — Buffett/Munger lens for value investors{% endblock %}</title>
+    <meta name="description" content="{% block description %}AI-assisted 8-stage stock audit tool grounded in Buffett, Munger, and Howard Marks frameworks.{% endblock %}">
+    {% block og %}
+    <meta property="og:title" content="{% block og_title %}Moatlens{% endblock %}">
+    <meta property="og:description" content="{% block og_description %}The Buffett/Munger lens for modern value investors.{% endblock %}">
+    <meta property="og:type" content="website">
+    {% endblock %}
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/htmx.org@1.9.12"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        ink: {900: '#0a0e1a', 800: '#12172a', 700: '#1e2541', 600: '#293354'},
+                        gold: '#d4af37',
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif; }
+        .prose-audit h2 { font-size: 1.25rem; font-weight: 600; margin-top: 1.5rem; margin-bottom: 0.5rem; }
+        .prose-audit h3 { font-size: 1.1rem; font-weight: 600; margin-top: 1rem; margin-bottom: 0.4rem; color: #9ca3af; }
+        .prose-audit p { margin-bottom: 0.75rem; line-height: 1.7; }
+        .prose-audit ul { margin-left: 1.5rem; margin-bottom: 0.75rem; list-style: disc; }
+        .prose-audit ol { margin-left: 1.5rem; margin-bottom: 0.75rem; list-style: decimal; }
+        .prose-audit table { width: 100%; border-collapse: collapse; margin: 0.75rem 0; }
+        .prose-audit th, .prose-audit td { padding: 0.5rem; border: 1px solid #374151; text-align: left; }
+        .prose-audit th { background: #1f2937; font-weight: 600; }
+        .prose-audit code { background: #1e293b; padding: 0.1rem 0.3rem; border-radius: 0.25rem; font-family: 'SF Mono', Monaco, monospace; font-size: 0.9em; }
+        .prose-audit blockquote { border-left: 3px solid #d4af37; padding-left: 1rem; margin: 0.75rem 0; color: #cbd5e1; }
+        [data-tooltip] { position: relative; cursor: help; border-bottom: 1px dashed #6b7280; }
+        [data-tooltip]:hover::after {
+            content: attr(data-tooltip);
+            position: absolute; bottom: 100%; left: 50%; transform: translateX(-50%);
+            background: #1f2937; color: #fff; padding: 0.5rem 0.75rem; border-radius: 0.375rem;
+            white-space: nowrap; max-width: 300px; white-space: normal; min-width: 200px;
+            font-size: 0.75rem; z-index: 100; border: 1px solid #374151;
+        }
+    </style>
+</head>
+<body class="bg-ink-900 text-gray-100 min-h-screen">
+    <nav class="bg-ink-800 border-b border-ink-700 px-6 py-3">
+        <div class="max-w-7xl mx-auto flex items-center justify-between">
+            <a href="/" class="flex items-center gap-2 text-xl font-bold text-white">
+                <span class="text-gold">◆</span> Moatlens
+                <span class="text-xs text-gray-500 font-normal">v0.1</span>
+            </a>
+            <div class="flex gap-6 text-sm items-center">
+                {% if user %}
+                    <a href="/dashboard" class="hover:text-white text-gray-400">Dashboard</a>
+                    <a href="/history" class="hover:text-white text-gray-400">History</a>
+                    <a href="/learn" class="hover:text-white text-gray-400">Learn</a>
+                    <a href="/settings" class="hover:text-white text-gray-400">Settings</a>
+                    <a href="/audit/new" class="bg-gold hover:bg-yellow-600 text-ink-900 font-medium px-3 py-1.5 rounded">+ New Audit</a>
+                    <a href="/logout" class="text-gray-500 hover:text-gray-300">Logout</a>
+                {% else %}
+                    <a href="/learn" class="hover:text-white text-gray-400">Learn</a>
+                    <a href="/login" class="hover:text-white text-gray-400">Log in</a>
+                    <a href="/signup" class="bg-gold hover:bg-yellow-600 text-ink-900 font-medium px-3 py-1.5 rounded">Sign up</a>
+                {% endif %}
+            </div>
+        </div>
+    </nav>
+    <main class="max-w-7xl mx-auto px-6 py-8">
+        {% block content %}{% endblock %}
+    </main>
+    <footer class="text-center text-gray-600 text-xs py-6 border-t border-ink-700 mt-8">
+        Moatlens v0.1 · Built for thinking investors, not for clicking ones<br>
+        <span class="text-gray-700">Not investment advice. Do your own research.</span>
+    </footer>
+</body>
+</html>

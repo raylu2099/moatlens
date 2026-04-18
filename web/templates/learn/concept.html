@@ -1,0 +1,11 @@
+{% extends "base.html" %}
+{% block title %}{{ slug | replace('-', ' ') | title }} — Moatlens Learn{% endblock %}
+{% block content %}
+
+<a href="/learn" class="text-gold text-sm hover:underline mb-4 inline-block">← All concepts</a>
+
+<div class="bg-ink-800 border border-ink-700 rounded-lg p-8 prose-audit max-w-3xl">
+{{ content | safe }}
+</div>
+
+{% endblock %}
