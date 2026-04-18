@@ -1,0 +1,23 @@
+.env
+.ghtoken
+.venv/
+venv/
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+.mypy_cache/
+.DS_Store
+
+# Runtime
+data/
+logs/
+*.log
+*.db
+*.sqlite
+
+# Demo cache (regenerated monthly)
+demo/*.cache
+
+# OS
+Thumbs.db
