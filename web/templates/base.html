@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{% block title %}Moatlens — Buffett/Munger lens{% endblock %}</title>
+    <script src="/static/js/theme.js"></script>
     <script src="https://cdn.tailwindcss.com"></script>
     <script>
         tailwind.config = {
@@ -11,7 +12,8 @@
             theme: {
                 extend: {
                     colors: {
-                        ink: {900: '#0a0e1a', 800: '#12172a', 700: '#1e2541', 600: '#293354'},
+                        ink:  {900: '#0a0e1a', 800: '#12172a', 700: '#1e2541', 600: '#293354'},
+                        paper: {50: '#fafafa', 100: '#f4f4f5', 200: '#e4e4e7', 300: '#d4d4d8'},
                         gold: '#d4af37',
                     }
                 }
@@ -33,29 +35,61 @@
         .prose-audit pre { background: #0b1020; padding: 0.75rem; border-radius: 0.375rem; overflow-x: auto; }
         .prose-audit blockquote { border-left: 3px solid #d4af37; padding-left: 1rem; margin: 0.75rem 0; color: #cbd5e1; }
         form[data-running] button[type=submit] { opacity: 0.6; pointer-events: none; }
+
+        /* Light mode */
+        html:not(.dark) body { background: #fafafa; color: #1a1a1a; }
+        html:not(.dark) .bg-ink-900 { background: #ffffff !important; }
+        html:not(.dark) .bg-ink-800 { background: #f4f4f5 !important; color: #1a1a1a; }
+        html:not(.dark) .bg-ink-700 { background: #e4e4e7 !important; }
+        html:not(.dark) .border-ink-700 { border-color: #d4d4d8 !important; }
+        html:not(.dark) .border-ink-600 { border-color: #a1a1aa !important; }
+        html:not(.dark) .text-gray-100 { color: #1a1a1a !important; }
+        html:not(.dark) .text-gray-200 { color: #262626 !important; }
+        html:not(.dark) .text-gray-300 { color: #404040 !important; }
+        html:not(.dark) .text-gray-400 { color: #525252 !important; }
+        html:not(.dark) .text-gray-500 { color: #737373 !important; }
+
+        /* Keyboard focus accessibility */
+        *:focus-visible { outline: 2px solid #d4af37; outline-offset: 2px; border-radius: 4px; }
+
+        /* SSE live region: visually present but screen-reader friendly */
+        .sr-only {
+            position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
+            overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0;
+        }
     </style>
 </head>
 <body class="bg-ink-900 text-gray-100 min-h-screen">
-    <nav class="bg-ink-800 border-b border-ink-700 px-6 py-3">
+    <a href="#main" class="sr-only focus:not-sr-only focus:absolute focus:top-2 focus:left-2 focus:bg-gold focus:text-ink-900 focus:px-3 focus:py-1 focus:rounded">跳到主内容</a>
+    <nav class="bg-ink-800 border-b border-ink-700 px-6 py-3" aria-label="主导航">
         <div class="max-w-7xl mx-auto flex items-center justify-between">
-            <a href="/" class="flex items-center gap-2 text-xl font-bold text-white">
-                <span class="text-gold">◆</span> Moatlens
-                <span class="text-xs text-gray-500 font-normal">v0.2 · self-use</span>
+            <a href="/" class="flex items-center gap-2 text-xl font-bold text-gray-100 hover:text-white">
+                <span class="text-gold" aria-hidden="true">◆</span> Moatlens
             </a>
-            <div class="flex gap-6 text-sm items-center">
-                <a href="/" class="hover:text-white text-gray-400">对话</a>
+            <div class="flex gap-4 text-sm items-center">
+                <a href="/" class="hover:text-white text-gray-400">首页</a>
                 <a href="/portfolio" class="hover:text-white text-gray-400">持仓</a>
                 <a href="/history" class="hover:text-white text-gray-400">历史</a>
                 <a href="/wisdom" class="hover:text-white text-gray-400">智慧</a>
                 <a href="/learn" class="hover:text-white text-gray-400">概念</a>
+                <button onclick="window.moatlensToggleTheme()"
+                        data-theme-toggle
+                        aria-label="切换主题"
+                        class="ml-2 text-gray-400 hover:text-white p-1 rounded">
+                    <span data-icon="sun" class="dark:hidden"></span>
+                    <span data-icon="moon" class="hidden dark:inline"></span>
+                </button>
             </div>
         </div>
     </nav>
-    <main class="max-w-7xl mx-auto px-6 py-8">
+    <main id="main" class="max-w-7xl mx-auto px-6 py-8">
         {% block content %}{% endblock %}
     </main>
-    <footer class="text-center text-gray-600 text-xs py-6 border-t border-ink-700 mt-8">
+    <footer class="text-center text-gray-500 text-xs py-6 border-t border-ink-700 mt-8">
         Moatlens · 个人思考工具，不构成投资建议
     </footer>
+
+    <script src="/static/js/icons.js"></script>
+    {% block scripts %}{% endblock %}
 </body>
 </html>

@@ -1,0 +1,187 @@
+{% extends "base.html" %}
+{% block title %}Moatlens — 选择模式{% endblock %}
+{% block content %}
+
+<div class="max-w-6xl mx-auto">
+    <div class="text-center mt-4 mb-8">
+        <h1 class="text-4xl font-bold mb-2">
+            <span class="text-gold" aria-hidden="true">◆</span> Moatlens
+        </h1>
+        <p class="text-gray-400">Buffett · Munger · Marks 的镜子下看一家公司</p>
+        <p class="text-xs text-gray-500 mt-3">选一种你今天想用的方式 ↓</p>
+    </div>
+
+    {% if keys_missing %}
+    <div class="bg-red-900/20 border border-red-800 rounded p-3 mb-6 text-sm text-red-200 max-w-3xl mx-auto">
+        ⚠️ 缺 API keys: <strong>{{ keys_missing | join(", ") }}</strong> —
+        在 <code class="bg-ink-900 px-1">.env</code> 里补上。 对话、快问、审视功能将无法工作；仅持仓看板可用。
+    </div>
+    {% endif %}
+
+    {# ====== THREE MODE CARDS ====== #}
+    <div role="radiogroup" aria-label="模式选择" class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+
+        {# --------- MODE: ASK --------- #}
+        <div role="radio" tabindex="0" aria-checked="false"
+             class="bg-ink-800 border border-ink-700 rounded-xl p-5 hover:border-gold hover:shadow-lg transition focus-within:border-gold">
+            <div class="flex items-start justify-between mb-3">
+                <div class="text-gold"><span data-icon="search"></span></div>
+                <span class="text-xs text-gray-500">老手 · 30 秒</span>
+            </div>
+            <h2 class="text-lg font-bold mb-1">🔍 快问快答</h2>
+            <p class="text-sm text-gray-400 mb-3">
+                自然语言问问题或输入 ticker，立刻得到**分块答案**+ 大师语录做引用。按问题意图**只跑相关 stage**，省钱。
+            </p>
+
+            <form method="POST" action="/ask/start" class="mb-2">
+                <label for="ask-input" class="sr-only">你的问题</label>
+                <div class="flex gap-1">
+                    <input id="ask-input" name="query" required
+                           placeholder='例如: "AAPL 值得买吗？"'
+                           class="flex-1 bg-ink-900 border border-ink-700 rounded px-3 py-2 text-sm text-white"
+                           autocomplete="off">
+                    <button type="submit" class="bg-gold hover:bg-yellow-500 text-ink-900 font-medium px-3 py-2 rounded">
+                        GO
+                    </button>
+                </div>
+            </form>
+            <div class="text-xs text-gray-500">
+                试试: <button class="hover:text-gold" type="button" onclick="document.getElementById('ask-input').value='AAPL 值得买吗？'">AAPL 值得买吗？</button> ·
+                <button class="hover:text-gold" type="button" onclick="document.getElementById('ask-input').value='TSLA 管理层怎样？'">TSLA 管理层</button>
+            </div>
+        </div>
+
+        {# --------- MODE: CHAT --------- #}
+        <div role="radio" tabindex="0" aria-checked="false"
+             class="bg-ink-800 border border-ink-700 rounded-xl p-5 hover:border-gold hover:shadow-lg transition focus-within:border-gold">
+            <div class="flex items-start justify-between mb-3">
+                <div class="text-gold"><span data-icon="chat"></span></div>
+                <span class="text-xs text-gray-500">学习 · 3-5 分钟</span>
+            </div>
+            <h2 class="text-lg font-bold mb-1">🎯 教练模式</h2>
+            <p class="text-sm text-gray-400 mb-3">
+                像私人教练陪你边审视边聊，每个 stage 后有大师语录 + Munger 反问。<strong>最适合学习</strong>和反复咀嚼。
+            </p>
+
+            <form method="POST" action="/chat/start" class="mb-2">
+                <label for="chat-input" class="sr-only">ticker</label>
+                <div class="flex gap-1">
+                    <input id="chat-input" name="input" required
+                           placeholder='例如: "AAPL" 或 "审视 NVDA"'
+                           class="flex-1 bg-ink-900 border border-ink-700 rounded px-3 py-2 text-sm text-white font-mono"
+                           autocomplete="off">
+                    <button type="submit" class="bg-gold hover:bg-yellow-500 text-ink-900 font-medium px-3 py-2 rounded">
+                        GO
+                    </button>
+                </div>
+            </form>
+            <div class="text-xs text-gray-500">
+                试试: <button class="hover:text-gold" type="button" onclick="document.getElementById('chat-input').value='NVDA'">NVDA</button> ·
+                <button class="hover:text-gold" type="button" onclick="document.getElementById('chat-input').value='BRK.B'">BRK.B</button> ·
+                <button class="hover:text-gold" type="button" onclick="document.getElementById('chat-input').value='MSFT'">MSFT</button>
+            </div>
+        </div>
+
+        {# --------- MODE: PORTFOLIO BRIEF --------- #}
+        <div role="radio" tabindex="0" aria-checked="false"
+             class="bg-ink-800 border border-ink-700 rounded-xl p-5 hover:border-gold hover:shadow-lg transition focus-within:border-gold">
+            <div class="flex items-start justify-between mb-3">
+                <div class="text-gold"><span data-icon="briefcase"></span></div>
+                <span class="text-xs text-gray-500">持仓 · 每天</span>
+            </div>
+            <h2 class="text-lg font-bold mb-1">📊 投资秘书</h2>
+            <p class="text-sm text-gray-400 mb-3">
+                打开就看你的持仓状态 + 今日提醒 + 季度复盘纪律。<strong>最适合每天一眼</strong>。
+            </p>
+
+            {% if briefing %}
+            <div class="bg-ink-900 border border-ink-700 rounded p-3 mb-3 text-xs space-y-1">
+                {% if briefing.alerts %}
+                    {% for alert in briefing.alerts[:3] %}
+                    <div class="flex items-start gap-2">
+                        <span class="text-{{ alert.color }}-400">{{ alert.icon }}</span>
+                        <span class="text-gray-300">{{ alert.text }}</span>
+                    </div>
+                    {% endfor %}
+                    {% if briefing.alerts | length > 3 %}
+                    <div class="text-gray-600 text-xs">还有 {{ briefing.alerts | length - 3 }} 条…</div>
+                    {% endif %}
+                {% else %}
+                    <div class="text-gray-500">目前没有需要注意的事。</div>
+                {% endif %}
+            </div>
+            {% else %}
+            <div class="bg-ink-900 border border-ink-700 rounded p-3 mb-3 text-xs text-gray-500">
+                <p class="mb-1">还没有标记持仓。</p>
+                <code class="text-gray-400">python -m cli hold add AAPL --size "5%"</code>
+            </div>
+            {% endif %}
+
+            <a href="/portfolio"
+               class="block bg-gold hover:bg-yellow-500 text-ink-900 font-medium text-center px-3 py-2 rounded text-sm">
+                打开简报 →
+            </a>
+        </div>
+    </div>
+
+    {# ====== DAILY WISDOM ====== #}
+    {% if daily_quote %}
+    <blockquote class="text-center text-sm text-gray-400 italic my-6 max-w-3xl mx-auto">
+        💭 {{ daily_quote.text_cn }}
+        <br>
+        <span class="text-xs text-gray-600 not-italic">— {{ daily_quote.author }}{% if daily_quote.source %}，{{ daily_quote.source }}{% endif %}</span>
+    </blockquote>
+    {% endif %}
+
+    {# ====== RECENT ACTIVITY ====== #}
+    {% if recent_sessions or recent_audits %}
+    <div class="mt-8 pt-6 border-t border-ink-700">
+        <h3 class="text-sm text-gray-500 mb-3">最近</h3>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
+            {% if recent_sessions %}
+            <div>
+                <div class="text-xs text-gray-500 mb-2">对话</div>
+                {% for s in recent_sessions %}
+                <a href="/chat/{{ s.session_id }}" class="block bg-ink-800 border border-ink-700 hover:border-gold rounded px-3 py-2 mb-1 flex justify-between items-center">
+                    <span><span class="text-gold font-mono">{{ s.ticker or "—" }}</span>
+                        <span class="text-gray-500 text-xs ml-2">{{ s.updated_at[:16].replace("T", " ") }}</span></span>
+                    <span class="text-xs text-gray-500">{{ s.audit_status }}</span>
+                </a>
+                {% endfor %}
+            </div>
+            {% endif %}
+            {% if recent_audits %}
+            <div>
+                <div class="text-xs text-gray-500 mb-2">审视记录</div>
+                {% for a in recent_audits %}
+                <a href="/audit/{{ a.ticker }}/{{ a.audit_date }}" class="block bg-ink-800 border border-ink-700 hover:border-gold rounded px-3 py-2 mb-1 flex justify-between items-center">
+                    <span><span class="text-gold font-mono">{{ a.ticker }}</span>
+                        <span class="text-gray-500 text-xs ml-2">{{ a.audit_date }}</span></span>
+                    <span class="text-xs {% if a.action == 'BUY' %}text-green-400{% elif a.action == 'AVOID' %}text-red-400{% else %}text-gray-500{% endif %}">{{ a.action or "—" }}</span>
+                </a>
+                {% endfor %}
+            </div>
+            {% endif %}
+        </div>
+    </div>
+    {% endif %}
+</div>
+
+<script>
+// Keyboard accessibility: arrows move focus between mode cards
+(function () {
+    const cards = document.querySelectorAll('[role="radio"]');
+    cards.forEach((card, i) => {
+        card.addEventListener('keydown', (e) => {
+            if (e.key === 'ArrowRight' || e.key === 'ArrowDown') {
+                e.preventDefault();
+                cards[(i + 1) % cards.length].focus();
+            } else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') {
+                e.preventDefault();
+                cards[(i - 1 + cards.length) % cards.length].focus();
+            }
+        });
+    });
+})();
+</script>
+{% endblock %}

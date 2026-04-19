@@ -80,14 +80,13 @@
     </div>
 </div>
 
+<script src="/static/js/sse-client.js"></script>
 <script>
 (function() {
     const root = document.getElementById("chatRoot");
     const session = JSON.parse(root.dataset.session);
-    const messagesEl = document.getElementById("messages");
     const liveArea = document.getElementById("liveArea");
     const statusLine = document.getElementById("statusLine");
-    const progressBar = document.getElementById("progressBar");
     const finalCard = document.getElementById("finalCard");
     const finalBody = document.getElementById("finalBody");
     const mungerList = document.getElementById("mungerList");
@@ -97,8 +96,13 @@
         window.scrollTo({ top: document.body.scrollHeight, behavior: "smooth" });
     }
 
-    function addMsg(role, html, opts) {
-        opts = opts || {};
+    function escapeHtml(s) {
+        return String(s).replace(/[&<>"']/g, c => ({
+            '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+        })[c]);
+    }
+
+    function addMsg(role, html) {
         const wrap = document.createElement("div");
         wrap.className = "flex " + (role === "user" ? "justify-end" : "");
         const bubbleCls = role === "user"
@@ -120,84 +124,85 @@
     function renderMetric(m) {
         const pass = m["pass"] === true ? "✅" : (m["pass"] === false ? "❌" : "—");
         const val = m.value !== null ? m.value + (m.unit || "") : "—";
-        return '<tr class="border-t border-ink-700"><td class="py-1">' + m.name
-            + '</td><td class="py-1 text-right font-mono">' + val
-            + '</td><td class="py-1 text-right text-xs text-gray-500">' + (m.threshold || "")
+        return '<tr class="border-t border-ink-700"><td class="py-1">' + escapeHtml(m.name)
+            + '</td><td class="py-1 text-right font-mono">' + escapeHtml(val.toString())
+            + '</td><td class="py-1 text-right text-xs text-gray-500">' + escapeHtml(m.threshold || "")
             + '</td><td class="py-1 text-center">' + pass + '</td></tr>';
     }
 
     function renderQuote(q) {
         return '<blockquote class="border-l-4 border-gold pl-3 py-1 my-2 text-sm text-gray-300">'
-            + '<div>' + q.text_cn + '</div>'
-            + '<div class="text-xs text-gray-500 mt-1">— ' + q.author
-            + (q.source ? '，' + q.source : '') + '</div>'
-            + '<a href="/wisdom/' + q.id + '" class="text-xs text-gold hover:text-white">查看出处 →</a>'
+            + '<div>' + escapeHtml(q.text_cn) + '</div>'
+            + '<div class="text-xs text-gray-500 mt-1">— ' + escapeHtml(q.author)
+            + (q.source ? '，' + escapeHtml(q.source) : '') + '</div>'
+            + '<a href="/wisdom/' + encodeURIComponent(q.id) + '" class="text-xs text-gold hover:text-white">查看出处 →</a>'
             + '</blockquote>';
     }
 
+    let client = null;
+
     function startStreaming() {
         statusLine.textContent = "状态：审视中…";
-        const es = new EventSource("/chat/" + session.session_id + "/stream");
-        es.onmessage = function(ev) {
-            let data;
-            try { data = JSON.parse(ev.data); } catch(e) { return; }
-            if (data.kind === "session_started") {
-                addMsg("coach", "好，开始查 " + data.ticker + " 的数据…");
-            } else if (data.kind === "stage_start") {
-                markStage(data.stage_id, "bg-yellow-500 animate-pulse");
-                addMsg("coach", "📍 Stage " + data.stage_id + "：" + data.stage_name + "…");
-            } else if (data.kind === "stage_complete") {
-                const verdictColor = data.verdict === "PASS" ? "text-green-400"
-                    : data.verdict === "FAIL" ? "text-red-400"
-                    : data.verdict === "BORDERLINE" ? "text-yellow-400" : "text-gray-500";
-                markStage(data.stage_id, data.verdict === "PASS" ? "bg-green-500"
-                    : data.verdict === "FAIL" ? "bg-red-500"
-                    : data.verdict === "BORDERLINE" ? "bg-yellow-500" : "bg-gray-600");
-                let html = '<div class="font-semibold mb-1">Stage ' + data.stage_id + ' — <span class="' + verdictColor + '">' + data.verdict + '</span></div>';
-                if (data.metrics && data.metrics.length) {
-                    html += '<table class="w-full text-xs"><thead class="text-gray-500"><tr><th class="text-left">指标</th><th class="text-right">值</th><th class="text-right">阈值</th><th class="text-center">通过</th></tr></thead><tbody>';
-                    html += data.metrics.map(renderMetric).join("");
-                    html += '</tbody></table>';
+        client = new MoatlensSSE({
+            url: "/chat/" + session.session_id + "/stream",
+            onConnected: () => { statusLine.textContent = "状态：审视中…"; },
+            onReconnecting: (n) => { statusLine.textContent = `状态：连接中断，重试 ${n}/5…`; },
+            onFatal: (e) => {
+                statusLine.textContent = "状态：连接失败";
+                addMsg("coach", '<span class="text-red-400">连接失败: ' + escapeHtml(e.message) + '</span>');
+            },
+            onEvent: (kind, data) => {
+                if (kind === "session_started") {
+                    addMsg("coach", "好，开始查 " + escapeHtml(data.ticker) + " 的数据…");
+                } else if (kind === "stage_start") {
+                    markStage(data.stage_id, "bg-yellow-500 animate-pulse");
+                    addMsg("coach", "📍 Stage " + data.stage_id + "：" + escapeHtml(data.stage_name) + "…");
+                } else if (kind === "stage_complete") {
+                    const verdictColor = data.verdict === "PASS" ? "text-green-400"
+                        : data.verdict === "FAIL" ? "text-red-400"
+                        : data.verdict === "BORDERLINE" ? "text-yellow-400" : "text-gray-500";
+                    markStage(data.stage_id, data.verdict === "PASS" ? "bg-green-500"
+                        : data.verdict === "FAIL" ? "bg-red-500"
+                        : data.verdict === "BORDERLINE" ? "bg-yellow-500" : "bg-gray-600");
+                    let html = '<div class="font-semibold mb-1">Stage ' + data.stage_id + ' — <span class="' + verdictColor + '">' + data.verdict + '</span></div>';
+                    if (data.metrics && data.metrics.length) {
+                        html += '<table class="w-full text-xs"><thead class="text-gray-500"><tr><th class="text-left">指标</th><th class="text-right">值</th><th class="text-right">阈值</th><th class="text-center">通过</th></tr></thead><tbody>';
+                        html += data.metrics.map(renderMetric).join("");
+                        html += '</tbody></table>';
+                    }
+                    addMsg("coach", html);
+                } else if (kind === "quote") {
+                    addMsg("coach", renderQuote(data.quote));
+                } else if (kind === "commentary") {
+                    let html = escapeHtml(data.text)
+                        .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+                        .replace(/\n\n/g, '<br><br>')
+                        .replace(/\n/g, '<br>');
+                    addMsg("coach", html);
+                } else if (kind === "final") {
+                    statusLine.textContent = "状态：已完成";
+                    finalCard.classList.remove("hidden");
+                    finalBody.innerHTML =
+                        '<div><strong>' + escapeHtml(data.ticker) + '</strong>: ' + escapeHtml(data.action)
+                        + ' · 置信度 ' + escapeHtml(data.confidence)
+                        + ' · 通过 ' + data.pass_count + '/' + data.stage_count
+                        + ' · 成本 $' + data.total_cost_usd.toFixed(3) + '</div>'
+                        + (data.report_date ? '<div class="text-xs mt-2"><a class="text-gold" href="/audit/' + encodeURIComponent(data.ticker) + '/' + encodeURIComponent(data.report_date) + '">完整报告 →</a></div>' : '');
+                    mungerList.innerHTML = (data.munger_questions || []).map(function(q) {
+                        return '<li>' + escapeHtml(q) + '</li>';
+                    }).join("");
+                    scrollToBottom();
+                } else if (kind === "already_complete") {
+                    statusLine.textContent = "状态：已完成（之前跑过的）";
+                    finalCard.classList.remove("hidden");
+                    finalBody.innerHTML = '<a class="text-gold" href="/audit/' + encodeURIComponent(data.ticker) + '/' + encodeURIComponent(data.report_date) + '">查看完整报告 →</a>';
+                } else if (kind === "error") {
+                    statusLine.textContent = "状态：错误";
+                    addMsg("coach", '<span class="text-red-400">错误：' + escapeHtml(data.message) + '</span>');
                 }
-                addMsg("coach", html);
-            } else if (data.kind === "quote") {
-                addMsg("coach", renderQuote(data.quote));
-            } else if (data.kind === "commentary") {
-                // Convert markdown-ish bold to HTML for readability
-                let html = data.text
-                    .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
-                    .replace(/\n\n/g, '<br><br>')
-                    .replace(/\n/g, '<br>');
-                addMsg("coach", html);
-            } else if (data.kind === "final") {
-                statusLine.textContent = "状态：已完成";
-                finalCard.classList.remove("hidden");
-                finalBody.innerHTML =
-                    '<div><strong>' + data.ticker + '</strong>: ' + data.action
-                    + ' · 置信度 ' + data.confidence
-                    + ' · 通过 ' + data.pass_count + '/' + data.stage_count
-                    + ' · 成本 $' + data.total_cost_usd.toFixed(3) + '</div>'
-                    + (data.report_date ? '<div class="text-xs mt-2"><a class="text-gold" href="/audit/' + data.ticker + '/' + data.report_date + '">完整报告 →</a></div>' : '');
-                mungerList.innerHTML = (data.munger_questions || []).map(function(q) {
-                    return '<li>' + q + '</li>';
-                }).join("");
-                es.close();
-                scrollToBottom();
-            } else if (data.kind === "already_complete") {
-                statusLine.textContent = "状态：已完成（之前跑过的）";
-                finalCard.classList.remove("hidden");
-                finalBody.innerHTML = '<a class="text-gold" href="/audit/' + data.ticker + '/' + data.report_date + '">查看完整报告 →</a>';
-                es.close();
-            } else if (data.kind === "error") {
-                statusLine.textContent = "状态：错误";
-                addMsg("coach", '<span class="text-red-400">错误：' + data.message + '</span>');
-                es.close();
-            }
-        };
-        es.onerror = function() {
-            statusLine.textContent = "状态：连接中断";
-            es.close();
-        };
+            },
+        });
+        client.start();
     }
 
     if (setupForm) {
@@ -207,32 +212,28 @@
             btn.disabled = true;
             btn.textContent = "审视中…";
             const fd = new FormData(setupForm);
-            // Save anchor_thesis + optionals
             try {
                 await fetch("/chat/" + session.session_id + "/message", {
                     method: "POST", body: fd,
                 });
             } catch (e) { console.error(e); }
-            // Render user's message into the transcript
             const userText = fd.get("text");
             if (userText) {
                 const wrap = document.createElement("div");
                 wrap.className = "flex justify-end";
-                wrap.innerHTML = '<div class="bg-gold/15 border border-gold/40 text-gray-100 rounded-lg px-4 py-3 max-w-[85%] text-sm">' + userText + '</div>';
+                wrap.innerHTML = '<div class="bg-gold/15 border border-gold/40 text-gray-100 rounded-lg px-4 py-3 max-w-[85%] text-sm">' + escapeHtml(userText) + '</div>';
                 liveArea.appendChild(wrap);
             }
             setupForm.remove();
             startStreaming();
         });
     } else if (session.audit_status === "complete") {
-        // Already done — no streaming needed
         statusLine.textContent = "状态：已完成";
         finalCard.classList.remove("hidden");
         finalBody.innerHTML = session.report_date
-            ? '<a class="text-gold" href="/audit/' + session.ticker + '/' + session.report_date + '">查看完整报告 →</a>'
+            ? '<a class="text-gold" href="/audit/' + encodeURIComponent(session.ticker) + '/' + encodeURIComponent(session.report_date) + '">查看完整报告 →</a>'
             : '';
     } else if (session.audit_status === "running") {
-        // In mid-audit (e.g. page refresh during run) — reconnect
         startStreaming();
     }
 })();

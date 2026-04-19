@@ -1,0 +1,176 @@
+{% extends "base.html" %}
+{% block title %}{{ session.ticker }}: {{ session.query[:40] }} — Moatlens{% endblock %}
+{% block content %}
+
+<div class="max-w-3xl mx-auto" id="askRoot" data-session='{{ session_json | safe }}'>
+
+    <div class="flex justify-between items-start mb-4">
+        <div>
+            <div class="text-xs text-gray-500 mb-1">你问:</div>
+            <h1 class="text-xl font-semibold">{{ session.query }}</h1>
+            <div class="text-xs text-gray-500 mt-2">Ticker: <span class="text-gold font-mono">{{ session.ticker }}</span></div>
+        </div>
+        <a href="/" class="text-xs text-gray-500 hover:text-white">← 新问题</a>
+    </div>
+
+    <div id="intentBox" class="bg-ink-800 border border-ink-700 rounded p-3 mb-4 text-xs text-gray-400">
+        <div class="flex items-center gap-2"><span data-icon="sparkles" class="text-gold"></span><span>解析问题中…</span></div>
+    </div>
+
+    <div id="shortAnswer" class="hidden bg-gold/10 border-l-4 border-gold p-4 mb-4 rounded">
+        <div class="text-xs text-gold mb-1">简短答案</div>
+        <p class="text-sm text-gray-100" id="shortAnswerText"></p>
+    </div>
+
+    <div id="blocks" class="space-y-4" aria-live="polite" aria-atomic="false"></div>
+
+    <div id="citations" class="mt-6 pt-6 border-t border-ink-700 hidden">
+        <h3 class="text-sm text-gray-500 mb-3">━ Citations ━</h3>
+        <ol class="text-xs text-gray-400 space-y-2" id="citationsList"></ol>
+    </div>
+
+    <div id="continueSuggestions" class="mt-6 pt-6 border-t border-ink-700 hidden">
+        <h3 class="text-sm text-gray-500 mb-3">━ 继续追问 ━</h3>
+        <div class="flex flex-wrap gap-2" id="continueList"></div>
+    </div>
+
+    <div id="connectionStatus" class="mt-6 text-xs text-gray-500" role="status" aria-live="polite"></div>
+</div>
+
+<script src="/static/js/sse-client.js"></script>
+<script>
+(function () {
+    const root = document.getElementById('askRoot');
+    const session = JSON.parse(root.dataset.session);
+    const intentBox = document.getElementById('intentBox');
+    const blocks = document.getElementById('blocks');
+    const shortAns = document.getElementById('shortAnswer');
+    const shortAnsText = document.getElementById('shortAnswerText');
+    const citations = document.getElementById('citations');
+    const citationsList = document.getElementById('citationsList');
+    const cont = document.getElementById('continueSuggestions');
+    const contList = document.getElementById('continueList');
+    const status = document.getElementById('connectionStatus');
+
+    const citedQuotes = [];
+
+    function renderBlock(data) {
+        const verdictColor = data.verdict === '✅' ? 'border-green-700'
+            : data.verdict === '❌' ? 'border-red-700'
+            : data.verdict === '🟡' ? 'border-yellow-700' : 'border-ink-700';
+        const div = document.createElement('div');
+        div.className = `bg-ink-800 border-l-4 ${verdictColor} rounded p-4`;
+        let html = `<div class="flex items-center gap-2 mb-2">
+                        <span class="text-lg">${data.verdict}</span>
+                        <h2 class="text-base font-semibold">${data.heading}</h2>
+                    </div>`;
+        if (data.prose) {
+            html += `<p class="text-sm text-gray-300 mb-3">${escapeHtml(data.prose)}</p>`;
+        }
+        if (data.metrics && data.metrics.length) {
+            html += '<table class="w-full text-xs"><thead class="text-gray-500"><tr>'
+                + '<th class="text-left py-1">指标</th><th class="text-right py-1">值</th>'
+                + '<th class="text-right py-1">阈值</th><th class="text-center py-1">通过</th>'
+                + '</tr></thead><tbody>';
+            data.metrics.forEach(m => {
+                const val = m.value !== null ? m.value + (m.unit || '') : '—';
+                const pass = m['pass'] === true ? '✅' : (m['pass'] === false ? '❌' : '—');
+                html += `<tr class="border-t border-ink-700">
+                    <td class="py-1">${escapeHtml(m.name)}</td>
+                    <td class="py-1 text-right font-mono">${escapeHtml(val.toString())}</td>
+                    <td class="py-1 text-right text-gray-500">${escapeHtml(m.threshold || '')}</td>
+                    <td class="py-1 text-center">${pass}</td>
+                </tr>`;
+            });
+            html += '</tbody></table>';
+        }
+        if (data.citation_ids && data.citation_ids.length) {
+            const refs = data.citation_ids.map(id => {
+                const idx = citedQuotes.findIndex(q => q.id === id);
+                return idx >= 0 ? `[${idx + 1}]` : '';
+            }).filter(Boolean).join(' ');
+            if (refs) html += `<div class="text-xs text-gold mt-2">${refs}</div>`;
+        }
+        div.innerHTML = html;
+        blocks.appendChild(div);
+    }
+
+    function renderCitation(q) {
+        const idx = citedQuotes.length;
+        citedQuotes.push(q);
+        const li = document.createElement('li');
+        li.innerHTML = `<div><strong class="text-gray-300">[${idx + 1}]</strong>
+            "${escapeHtml(q.text_cn)}" — ${escapeHtml(q.author)}${q.source ? '，' + escapeHtml(q.source) : ''}
+            <a href="/wisdom/${q.id}" class="text-gold hover:underline">→</a></div>`;
+        citationsList.appendChild(li);
+        citations.classList.remove('hidden');
+    }
+
+    function escapeHtml(s) {
+        return String(s).replace(/[&<>"']/g, c => ({
+            '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+        })[c]);
+    }
+
+    const client = new MoatlensSSE({
+        url: `/ask/${session.session_id}/stream`,
+        onConnected: () => { status.textContent = ''; },
+        onReconnecting: (n) => { status.textContent = `连接中断，重试 ${n}/5…`; },
+        onFatal: (e) => { status.innerHTML = `<span class="text-red-400">连接失败: ${escapeHtml(e.message)}</span>`; },
+        onEvent: (kind, data) => {
+            if (kind === 'thinking') {
+                intentBox.innerHTML = `<div class="flex items-center gap-2"><span data-icon="sparkles" class="text-gold"></span><span>${escapeHtml(data.text)}</span></div>`;
+                if (window.applyIcons) window.applyIcons();
+            } else if (kind === 'intent') {
+                intentBox.innerHTML = `<div class="text-gold mb-1">路由: 跑 Stage ${data.stages.join(', ')}</div>
+                    <div class="text-gray-400">${escapeHtml(data.rationale)}</div>`;
+            } else if (kind === 'stage_start') {
+                status.textContent = `正在跑 Stage ${data.stage_id}: ${data.stage_name}…`;
+            } else if (kind === 'quote') {
+                renderCitation(data.quote);
+            } else if (kind === 'answer_block') {
+                renderBlock(data);
+            } else if (kind === 'dep_stage') {
+                // silent — we pulled this for dependencies, not for display
+            } else if (kind === 'final') {
+                status.textContent = '完成';
+                shortAnsText.textContent = data.short_answer;
+                shortAns.classList.remove('hidden');
+                // Move short answer to top
+                blocks.parentNode.insertBefore(shortAns, blocks);
+                if (data.continue_suggestions && data.continue_suggestions.length) {
+                    data.continue_suggestions.forEach(s => {
+                        const a = document.createElement('button');
+                        a.className = 'bg-ink-800 border border-ink-700 hover:border-gold text-xs text-gray-300 px-3 py-1 rounded';
+                        a.textContent = s;
+                        a.type = 'button';
+                        a.addEventListener('click', () => {
+                            const form = document.createElement('form');
+                            form.method = 'POST';
+                            form.action = '/ask/start';
+                            const i = document.createElement('input');
+                            i.name = 'query';
+                            i.value = s;
+                            form.appendChild(i);
+                            document.body.appendChild(form);
+                            form.submit();
+                        });
+                        contList.appendChild(a);
+                    });
+                    cont.classList.remove('hidden');
+                }
+            } else if (kind === 'error') {
+                status.innerHTML = `<span class="text-red-400">错误: ${escapeHtml(data.message || '')}</span>`;
+            }
+        },
+    });
+
+    if (session.status === 'complete') {
+        status.textContent = '已完成 (查看历史)';
+    } else {
+        client.start();
+    }
+})();
+</script>
+
+{% endblock %}

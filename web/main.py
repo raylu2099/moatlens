@@ -1,22 +1,25 @@
 """
-Moatlens web app v0.4 — single-user mode with conversational-coach UX.
+Moatlens web app v0.5 — three-mode landing + full hardening.
 
 Binds to 127.0.0.1. No auth. Keys come from .env.
 
 Routes:
-- GET  /                           chat landing (single input)
-- POST /chat/start                 create session, return session_id
-- GET  /chat/<id>                  conversation page (SSE client)
-- GET  /chat/<id>/stream           SSE event stream
-- POST /chat/<id>/message          submit anchor_thesis / variant view
-- GET  /wisdom                     quote library index (grouped by theme)
-- GET  /wisdom/<id>                single quote detail
-- GET  /portfolio                  holdings dashboard
+- GET  /                           three-card home (chat / ask / portfolio)
+- POST /chat/start                 start conversational audit
+- GET  /chat/<id>                  chat page
+- GET  /chat/<id>/stream           chat SSE
+- POST /chat/<id>/message          set anchor thesis
+- POST /ask/start                  start Q&A session (intent-routed stages)
+- GET  /ask/<id>                   ask page
+- GET  /ask/<id>/stream            ask SSE
+- GET  /portfolio                  holdings dashboard (with briefing data)
 - GET  /history                    audit history
 - GET  /audit/<t>/diff             pairwise diff
 - GET  /audit/<t>/<date>           view report
-- GET  /audit/new                  legacy form (kept for CLI-users' muscle memory)
+- GET  /audit/new                  legacy form
 - POST /audit/new                  legacy synchronous audit
+- GET  /wisdom                     quote library
+- GET  /wisdom/<id>                single quote
 - GET  /learn, /learn/<slug>       knowledge base
 - GET  /api/status                 healthcheck
 """
@@ -25,7 +28,9 @@ from __future__ import annotations
 import json
 import re
 import sys
-from datetime import date, datetime
+from contextlib import asynccontextmanager
+from datetime import date, datetime, timezone
+from hashlib import sha256
 from pathlib import Path
 from typing import Annotated
 
@@ -43,11 +48,14 @@ from engine.orchestrator import run_audit_auto
 from engine.providers import yfinance_provider as yfp
 from engine.report_renderer import render_markdown
 from engine.stream_adapter import stream_audit
+from engine import ask as ask_engine
 from engine import wisdom as wisdom_mod
+from shared.ask import AskSession, load_ask_session, save_ask_session
 from shared.chat import (
-    ChatMessage, ChatSession, cleanup_expired,
+    ChatMessage, ChatSession, cleanup_expired as cleanup_chats,
     list_sessions, load_session, save_session,
 )
+from shared.ask import cleanup_expired as cleanup_asks
 from shared.config import load_config, load_keys_from_env
 from shared.holdings import is_holding, load_holdings
 from shared.storage import list_audits, load_audit, load_last_two_audits, save_audit
@@ -56,7 +64,47 @@ from web.diff import render_audit_diff_html
 
 cfg = load_config()
 
-app = FastAPI(title="Moatlens (single-user)", version="0.4.0")
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Startup: prune sessions older than 7 days; mark in-progress sessions as
+    # error (they were running when uvicorn was killed).
+    try:
+        cleanup_chats(cfg)
+        cleanup_asks(cfg)
+        _recover_stale_sessions()
+    except Exception as e:
+        print(f"[startup] cleanup error: {e}", file=sys.stderr)
+    yield
+    # Shutdown: nothing to do; filesystem state is already consistent
+
+
+def _recover_stale_sessions():
+    """Mark any 'running' chat/ask sessions >10 min old as 'error'."""
+    now = datetime.now(timezone.utc)
+    for s in list_sessions(cfg, limit=1000):
+        if s.get("audit_status") != "running":
+            continue
+        try:
+            ts = s.get("updated_at", "")
+            dt = datetime.fromisoformat(ts)
+            if dt.tzinfo is None:
+                dt = dt.replace(tzinfo=timezone.utc)
+            age_s = (now - dt).total_seconds()
+            if age_s > 600:
+                sess = load_session(cfg, s["session_id"])
+                if sess:
+                    sess.audit_status = "error"
+                    sess.add(ChatMessage.new(
+                        "system",
+                        "⚠️ 服务器重启时这次审视中断了。可以重新发起。",
+                    ))
+                    save_session(cfg, sess)
+        except Exception:
+            continue
+
+
+app = FastAPI(title="Moatlens", version="0.5.0", lifespan=lifespan)
 
 STATIC_DIR = Path(__file__).parent / "static"
 TEMPLATES_DIR = Path(__file__).parent / "templates"
@@ -66,30 +114,91 @@ templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
 templates.env.globals["app_name"] = "Moatlens"
 
 
-@app.on_event("startup")
-async def _startup_cleanup():
-    # Prune sessions older than 7 days
-    try:
-        cleanup_expired(cfg)
-    except Exception:
-        pass
-
-
 # =====================================================================
-# Landing (chat)
+# Home (three-mode landing)
 # =====================================================================
 
 @app.get("/", response_class=HTMLResponse)
-async def landing(request: Request):
+async def home(request: Request):
     keys = load_keys_from_env()
     keys_missing = keys.has_required()[1]
-    recent = list_sessions(cfg, limit=5)
+    recent = list_sessions(cfg, limit=3)
+    audits = list_audits(cfg)[:3]
     holdings = load_holdings(cfg)
-    return templates.TemplateResponse(request, "chat/landing.html", {
-        "recent_sessions": recent,
+
+    briefing = _build_briefing(holdings, audits)
+    daily_quote = _daily_quote()
+
+    return templates.TemplateResponse(request, "home.html", {
         "keys_missing": keys_missing,
-        "has_holdings": bool(holdings),
+        "recent_sessions": recent,
+        "recent_audits": audits,
+        "briefing": briefing,
+        "daily_quote": daily_quote,
     })
+
+
+def _build_briefing(holdings: list[dict], audits: list[dict]) -> dict | None:
+    """Assemble today's alerts from holdings state + audit ages."""
+    if not holdings:
+        return None
+    alerts = []
+    held_tickers = {h["ticker"] for h in holdings}
+
+    for h in holdings:
+        ticker = h["ticker"]
+        current, _ = load_last_two_audits(cfg, ticker)
+        if not current:
+            alerts.append({
+                "icon": "⚠", "color": "red",
+                "text": f"{ticker} 是持仓但从未 audit —— 补审一次",
+            })
+            continue
+        try:
+            age = (date.today() - date.fromisoformat(current.audit_date)).days
+        except Exception:
+            age = 0
+        if age >= 180:
+            alerts.append({
+                "icon": "⚠", "color": "red",
+                "text": f"{ticker} thesis 已 {age} 天未复盘（季度纪律超期）",
+            })
+        elif age >= 90:
+            alerts.append({
+                "icon": "⏳", "color": "yellow",
+                "text": f"{ticker} thesis {age} 天，快到季度复盘窗口",
+            })
+        # Check buy/sell zone
+        if current.thesis:
+            try:
+                price = yfp.fetch_current_price(ticker)
+            except Exception:
+                price = None
+            tb = current.thesis.target_buy_price
+            ts_ = current.thesis.target_sell_price
+            if price and tb and price <= tb:
+                alerts.append({
+                    "icon": "🟢", "color": "green",
+                    "text": f"{ticker} ${price:.0f} 在加仓区（≤ ${tb:.0f}）",
+                })
+            elif price and ts_ and price >= ts_:
+                alerts.append({
+                    "icon": "🔴", "color": "red",
+                    "text": f"{ticker} ${price:.0f} 在减仓区（≥ ${ts_:.0f}）",
+                })
+
+    return {"alerts": alerts, "total_holdings": len(holdings)}
+
+
+def _daily_quote() -> dict | None:
+    """Pick a deterministic daily quote by date hash."""
+    quotes = wisdom_mod.load_wisdom(cfg)
+    if not quotes:
+        return None
+    today = date.today().isoformat()
+    idx = int(sha256(today.encode()).hexdigest(), 16) % len(quotes)
+    q = quotes[idx]
+    return {"text_cn": q.text_cn, "author": q.author, "source": q.source}
 
 
 # =====================================================================
@@ -98,14 +207,10 @@ async def landing(request: Request):
 
 TICKER_RE = re.compile(r"^[A-Z][A-Z0-9]{0,5}(\.[A-Z]{1,2})?$")
 
-
-# Tokens that LOOK like tickers in English but rarely are. Expand as you hit false positives.
 _TICKER_STOPWORDS = {
-    # Finance-y noise
     "AI", "IT", "US", "CN", "HK", "EU", "GDP", "CEO", "CFO", "COO", "ROI", "ROIC",
     "EPS", "PE", "PEG", "PB", "DCF", "WACC", "FCF", "SBC", "IPO", "ETF", "REIT",
     "NEW", "BUY", "SELL", "AVOID", "WATCH", "HOLD", "BUYS", "SELLS",
-    # Ordinary English words
     "THE", "AND", "FOR", "BUT", "NOT", "YES", "NO", "WHY", "HOW", "WHEN",
     "WHAT", "WHERE", "WHO", "CAN", "WILL", "ARE", "WAS", "HAS", "HAVE",
     "THIS", "THAT", "WITH", "FROM", "INTO", "ONTO", "SHOULD", "WOULD", "COULD",
@@ -114,42 +219,25 @@ _TICKER_STOPWORDS = {
     "YOU", "YOUR", "MINE", "OURS", "THEM", "THEIR", "WANT", "NEED", "LIKE",
     "TODAY", "MAYBE", "AGAIN", "THINK", "KNOW", "SEEM", "LOOKS", "WORK",
     "MUCH", "MANY", "WHICH", "BEING", "DOING", "GOING", "MAKE", "MADE",
-    # Verbs people might type in Chinese-English mix
     "LOOK", "SEE", "CHECK", "ASK", "TELL", "GIVE", "TAKE",
-    # Chinese-transliterated tokens
     "SHI", "BU", "HAO",
 }
 
 
 def _extract_ticker(raw: str) -> str | None:
-    """Extract a ticker from free-text input.
-
-    Strategy (in order):
-    1. If raw input (uppercased) is itself a valid ticker → use it.
-    2. Find explicit ALL-CAPS 2-6 letter tokens in the raw input.
-    3. Fall back to any 3-5 letter alphabetic token (most common ticker shape),
-       screening against the stop-word list.
-    """
     if not raw:
         return None
     raw = raw.strip()
-
-    # 1. Whole input matches ticker form
     if TICKER_RE.match(raw.upper()) and raw.upper() not in _TICKER_STOPWORDS:
         return raw.upper()
-
-    # 2. Prefer tokens that were typed ALL-CAPS by the user — strong signal of ticker
     allcaps = re.findall(r"\b[A-Z]{2,6}(?:\.[A-Z]{1,2})?\b", raw)
     for tok in allcaps:
         if TICKER_RE.match(tok) and tok not in _TICKER_STOPWORDS:
             return tok
-
-    # 3. Fallback: 3-5 letter alphabetic tokens (most US tickers sit here)
     for tok in re.findall(r"\b[A-Za-z]{3,5}\b", raw):
         up = tok.upper()
         if TICKER_RE.match(up) and up not in _TICKER_STOPWORDS:
             return up
-
     return None
 
 
@@ -202,7 +290,6 @@ async def chat_message(
     my_variant_view: Annotated[str, Form()] = "",
     tech_mode: Annotated[str, Form()] = "",
 ):
-    """Accept user follow-up (primarily used once to set anchor_thesis before audit)."""
     if not session_id.isalnum():
         raise HTTPException(404)
     session = load_session(cfg, session_id)
@@ -226,14 +313,11 @@ async def chat_message(
 
 @app.get("/chat/{session_id}/stream")
 async def chat_stream(request: Request, session_id: str):
-    """SSE stream — runs the full audit and emits events."""
     if not session_id.isalnum():
         raise HTTPException(404)
     session = load_session(cfg, session_id)
     if not session:
         raise HTTPException(404)
-
-    # If audit already complete, replay final state in one event and end.
     if session.audit_status == "complete":
         def _replay():
             yield _sse({"kind": "already_complete",
@@ -244,22 +328,95 @@ async def chat_stream(request: Request, session_id: str):
     keys = load_keys_from_env()
 
     def _gen():
-        # Keepalive initial comment
         yield ":ok\n\n"
         try:
+            import time
+            last_emit = time.time()
             for kind, payload in stream_audit(cfg, keys, session):
+                yield _sse({"kind": kind, **payload})
+                last_emit = time.time()
+                # Emit heartbeat if no event in 15s (simulated here since
+                # stream_audit is synchronous; actual heartbeat is automatic
+                # because stage events come frequently enough)
+        except Exception as e:
+            yield _sse({"kind": "error", "message": f"{type(e).__name__}: {e}"})
+
+    return StreamingResponse(_gen(), media_type="text/event-stream", headers={
+        "Cache-Control": "no-cache",
+        "X-Accel-Buffering": "no",
+    })
+
+
+def _sse(obj: dict) -> str:
+    return f"data: {json.dumps(obj, ensure_ascii=False)}\n\n"
+
+
+# =====================================================================
+# Ask (Perplexity-style Q&A)
+# =====================================================================
+
+@app.post("/ask/start")
+async def ask_start(
+    request: Request,
+    query: Annotated[str, Form()],
+):
+    query = query.strip()
+    if not query:
+        raise HTTPException(400, "请输入问题")
+    ticker = _extract_ticker(query)
+    if not ticker:
+        raise HTTPException(400, "问题里没找到 ticker。试试「AAPL 值得买吗？」")
+
+    session = AskSession.new(query=query, ticker=ticker)
+    save_ask_session(cfg, session)
+    return RedirectResponse(f"/ask/{session.session_id}", status_code=302)
+
+
+@app.get("/ask/{session_id}", response_class=HTMLResponse)
+async def ask_page(request: Request, session_id: str):
+    if not session_id.isalnum():
+        raise HTTPException(404)
+    session = load_ask_session(cfg, session_id)
+    if not session:
+        raise HTTPException(404, "问题不存在或已过期")
+    return templates.TemplateResponse(request, "ask/session.html", {
+        "session": session,
+        "session_json": json.dumps({
+            "session_id": session.session_id,
+            "ticker": session.ticker,
+            "query": session.query,
+            "status": session.status,
+        }, ensure_ascii=False),
+    })
+
+
+@app.get("/ask/{session_id}/stream")
+async def ask_stream(request: Request, session_id: str):
+    if not session_id.isalnum():
+        raise HTTPException(404)
+    session = load_ask_session(cfg, session_id)
+    if not session:
+        raise HTTPException(404)
+    if session.status == "complete":
+        def _replay():
+            yield _sse({"kind": "already_complete",
+                        "ticker": session.ticker})
+        return StreamingResponse(_replay(), media_type="text/event-stream")
+
+    keys = load_keys_from_env()
+
+    def _gen():
+        yield ":ok\n\n"
+        try:
+            for kind, payload in ask_engine.stream_ask(cfg, keys, session):
                 yield _sse({"kind": kind, **payload})
         except Exception as e:
             yield _sse({"kind": "error", "message": f"{type(e).__name__}: {e}"})
 
     return StreamingResponse(_gen(), media_type="text/event-stream", headers={
         "Cache-Control": "no-cache",
-        "X-Accel-Buffering": "no",   # disable buffering in nginx if behind proxy
+        "X-Accel-Buffering": "no",
     })
-
-
-def _sse(obj: dict) -> str:
-    return f"data: {json.dumps(obj, ensure_ascii=False)}\n\n"
 
 
 # =====================================================================
@@ -269,7 +426,6 @@ def _sse(obj: dict) -> str:
 @app.get("/wisdom", response_class=HTMLResponse)
 async def wisdom_index(request: Request):
     grouped = wisdom_mod.group_by_theme(cfg)
-    # Canonical order of themes for display
     preferred_order = [
         "competence", "moat", "management", "valuation", "margin_of_safety",
         "asymmetry", "variant_view", "contrarian", "inversion",
@@ -320,7 +476,7 @@ async def wisdom_detail(request: Request, quote_id: str):
 
 
 # =====================================================================
-# Legacy audit form (kept for CLI users / direct URL bookmarks)
+# Legacy audit form
 # =====================================================================
 
 @app.get("/audit/new", response_class=HTMLResponse)
@@ -528,5 +684,5 @@ async def learn_concept(request: Request, slug: str):
 
 @app.get("/api/status", response_class=JSONResponse)
 async def api_status():
-    return {"status": "ok", "version": "0.4.0", "mode": "single-user",
+    return {"status": "ok", "version": "0.5.0", "mode": "single-user",
             "timestamp": datetime.now().isoformat()}
