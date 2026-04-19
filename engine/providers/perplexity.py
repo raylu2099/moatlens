@@ -38,6 +38,15 @@ def _call(
     if not keys.perplexity:
         return {"error": "PERPLEXITY_API_KEY missing"}
 
+    # Rate-limit guard
+    try:
+        from shared.ratelimit import require_token
+        require_token("perplexity")
+    except ImportError:
+        pass
+    except Exception as e:
+        return {"error": f"rate-limit: {e}"}
+
     body = {
         "model": model,
         "messages": [{"role": "user", "content": prompt}],
@@ -114,6 +123,13 @@ def research(
     ).strip()
     results = data.get("search_results", []) or []
     cost = float(data.get("usage", {}).get("cost", {}).get("total_cost", 0))
+
+    # Log metrics — never raises
+    try:
+        from shared.metrics import log_cost
+        log_cost(cfg, provider="perplexity", model=m, cost_usd=cost, tag=cache_ns)
+    except Exception:
+        pass
 
     cache_set(cfg, cache_ns, cache_key, {"answer": answer, "results": results})
     return answer, results, cost

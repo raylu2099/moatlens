@@ -171,17 +171,13 @@ def run(
         cfg, keys, system_prompt, user_prompt, max_tokens=3000,
     )
 
-    # Parse JSON
-    parsed = {}
-    try:
-        text = claude_output.strip()
-        if "```json" in text:
-            text = text.split("```json", 1)[1].split("```", 1)[0]
-        elif "```" in text:
-            text = text.split("```", 1)[1].split("```", 1)[0]
-        parsed = json.loads(text.strip())
-    except (json.JSONDecodeError, IndexError) as e:
-        parsed = {"summary_cn": claude_output[:500], "parse_error": str(e)}
+    # Parse + validate via pydantic guardrails
+    from engine.guardrails import validate_moat
+    parsed, parse_errors = validate_moat(claude_output)
+    if parse_errors:
+        parsed["parse_errors"] = parse_errors
+    if not parsed.get("summary_cn"):
+        parsed["summary_cn"] = claude_output[:500]
 
     # Build metrics from parsed result
     metrics = []

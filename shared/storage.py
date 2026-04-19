@@ -12,8 +12,10 @@ and rebuilds it. You can always delete the index to force a rebuild.
 """
 from __future__ import annotations
 
+import fcntl
 import json
 import os
+from contextlib import contextmanager
 from datetime import date, datetime
 from pathlib import Path
 
@@ -22,6 +24,24 @@ from shared.config import Config
 
 
 INDEX_FILENAME = "_index.json"
+
+
+@contextmanager
+def _index_lock(cfg: Config):
+    """Advisory POSIX flock on the index file — serializes concurrent save_audit."""
+    p = _index_path(cfg)
+    p.parent.mkdir(parents=True, exist_ok=True)
+    # Use a dedicated lockfile so the actual index can be replaced atomically
+    lock_path = p.with_suffix(p.suffix + ".lock")
+    with open(lock_path, "w") as f:
+        try:
+            fcntl.flock(f.fileno(), fcntl.LOCK_EX)
+            yield
+        finally:
+            try:
+                fcntl.flock(f.fileno(), fcntl.LOCK_UN)
+            except Exception:
+                pass
 
 
 def audits_root(cfg: Config) -> Path:
@@ -67,13 +87,15 @@ def save_audit(
     _atomic_write(json_path, report.model_dump_json(indent=2))
     _atomic_write(md_path, markdown)
 
-    # Update index incrementally
-    index = _load_index_raw(cfg)
-    key = (report.ticker, report.audit_date)
-    index = [r for r in index if (r["ticker"], r["audit_date"]) != key]
-    index.append(_row_from_report(report, md_path, json_path))
-    index.sort(key=lambda r: r["audit_date"], reverse=True)
-    _atomic_write(_index_path(cfg), json.dumps(index, indent=2, ensure_ascii=False))
+    # Update index incrementally under flock — protects against concurrent
+    # save_audit (e.g. Ray's CLI finishing one audit while web does another)
+    with _index_lock(cfg):
+        index = _load_index_raw(cfg)
+        key = (report.ticker, report.audit_date)
+        index = [r for r in index if (r["ticker"], r["audit_date"]) != key]
+        index.append(_row_from_report(report, md_path, json_path))
+        index.sort(key=lambda r: r["audit_date"], reverse=True)
+        _atomic_write(_index_path(cfg), json.dumps(index, indent=2, ensure_ascii=False))
 
     return md_path, json_path
 

@@ -28,6 +28,7 @@ from __future__ import annotations
 import json
 import re
 import sys
+import asyncio
 from contextlib import asynccontextmanager
 from datetime import date, datetime, timezone
 from hashlib import sha256
@@ -57,6 +58,10 @@ from shared.chat import (
 )
 from shared.ask import cleanup_expired as cleanup_asks
 from shared.config import load_config, load_keys_from_env
+from shared.logging_setup import get_logger, setup_logging
+
+setup_logging()
+log = get_logger("moatlens.web")
 from shared.holdings import is_holding, load_holdings
 from shared.storage import list_audits, load_audit, load_last_two_audits, save_audit
 from web.diff import render_audit_diff_html
@@ -327,19 +332,43 @@ async def chat_stream(request: Request, session_id: str):
 
     keys = load_keys_from_env()
 
-    def _gen():
+    async def _gen():
         yield ":ok\n\n"
-        try:
-            import time
-            last_emit = time.time()
-            for kind, payload in stream_audit(cfg, keys, session):
-                yield _sse({"kind": kind, **payload})
-                last_emit = time.time()
-                # Emit heartbeat if no event in 15s (simulated here since
-                # stream_audit is synchronous; actual heartbeat is automatic
-                # because stage events come frequently enough)
-        except Exception as e:
-            yield _sse({"kind": "error", "message": f"{type(e).__name__}: {e}"})
+        loop = asyncio.get_event_loop()
+        queue: asyncio.Queue = asyncio.Queue()
+        done = asyncio.Event()
+
+        def producer():
+            try:
+                for kind, payload in stream_audit(cfg, keys, session):
+                    asyncio.run_coroutine_threadsafe(
+                        queue.put(("event", {"kind": kind, **payload})), loop,
+                    )
+            except Exception as e:
+                log.error("chat_stream producer failed", extra={"err": str(e)})
+                asyncio.run_coroutine_threadsafe(
+                    queue.put(("event", {"kind": "error",
+                                         "message": f"{type(e).__name__}: {e}"})),
+                    loop,
+                )
+            finally:
+                asyncio.run_coroutine_threadsafe(queue.put(("done", None)), loop)
+
+        # Run the sync stream in a thread so we can interleave heartbeats
+        import threading
+        threading.Thread(target=producer, daemon=True).start()
+
+        while not done.is_set():
+            try:
+                tag, data = await asyncio.wait_for(queue.get(), timeout=15.0)
+            except asyncio.TimeoutError:
+                # Heartbeat — keeps proxies and browsers happy
+                yield ":keepalive\n\n"
+                continue
+            if tag == "done":
+                done.set()
+                break
+            yield _sse(data)
 
     return StreamingResponse(_gen(), media_type="text/event-stream", headers={
         "Cache-Control": "no-cache",
@@ -405,13 +434,39 @@ async def ask_stream(request: Request, session_id: str):
 
     keys = load_keys_from_env()
 
-    def _gen():
+    async def _gen():
         yield ":ok\n\n"
-        try:
-            for kind, payload in ask_engine.stream_ask(cfg, keys, session):
-                yield _sse({"kind": kind, **payload})
-        except Exception as e:
-            yield _sse({"kind": "error", "message": f"{type(e).__name__}: {e}"})
+        loop = asyncio.get_event_loop()
+        queue: asyncio.Queue = asyncio.Queue()
+
+        def producer():
+            try:
+                for kind, payload in ask_engine.stream_ask(cfg, keys, session):
+                    asyncio.run_coroutine_threadsafe(
+                        queue.put(("event", {"kind": kind, **payload})), loop,
+                    )
+            except Exception as e:
+                log.error("ask_stream producer failed", extra={"err": str(e)})
+                asyncio.run_coroutine_threadsafe(
+                    queue.put(("event", {"kind": "error",
+                                         "message": f"{type(e).__name__}: {e}"})),
+                    loop,
+                )
+            finally:
+                asyncio.run_coroutine_threadsafe(queue.put(("done", None)), loop)
+
+        import threading
+        threading.Thread(target=producer, daemon=True).start()
+
+        while True:
+            try:
+                tag, data = await asyncio.wait_for(queue.get(), timeout=15.0)
+            except asyncio.TimeoutError:
+                yield ":keepalive\n\n"
+                continue
+            if tag == "done":
+                break
+            yield _sse(data)
 
     return StreamingResponse(_gen(), media_type="text/event-stream", headers={
         "Cache-Control": "no-cache",

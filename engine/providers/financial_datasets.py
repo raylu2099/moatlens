@@ -42,6 +42,14 @@ class FinancialDatasetsError(RuntimeError):
 def _api_get(keys: ApiKeys, path: str, params: dict) -> dict:
     if not keys.financial_datasets:
         raise FinancialDatasetsError("FINANCIAL_DATASETS_API_KEY missing")
+    # Rate-limit guard — protects subscription quota from runaway loops
+    try:
+        from shared.ratelimit import require_token
+        require_token("financial_datasets")
+    except ImportError:
+        pass
+    except Exception as e:
+        raise FinancialDatasetsError(f"rate-limit: {e}")
     url = f"{API_BASE}/{path}"
     try:
         r = requests.get(

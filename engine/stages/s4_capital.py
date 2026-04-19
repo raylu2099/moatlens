@@ -191,16 +191,12 @@ def run(
         cfg, keys, system_prompt, user_prompt, max_tokens=2000,
     )
 
-    parsed = {}
-    try:
-        text = claude_output.strip()
-        if "```json" in text:
-            text = text.split("```json", 1)[1].split("```", 1)[0]
-        elif "```" in text:
-            text = text.split("```", 1)[1].split("```", 1)[0]
-        parsed = json.loads(text.strip())
-    except Exception:
-        parsed = {"summary_cn": claude_output[:500]}
+    from engine.guardrails import validate_management
+    parsed, parse_errors = validate_management(claude_output)
+    if parse_errors:
+        parsed["parse_errors"] = parse_errors
+    if not parsed.get("summary_cn"):
+        parsed["summary_cn"] = claude_output[:500]
 
     # Metrics from Claude
     integ = parsed.get("integrity_score")

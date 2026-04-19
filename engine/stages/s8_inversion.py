@@ -119,16 +119,12 @@ Ticker: {ticker}
         cfg, keys, system_prompt, user_prompt, max_tokens=3500,
     )
 
-    parsed = {}
-    try:
-        text = claude_output.strip()
-        if "```json" in text:
-            text = text.split("```json", 1)[1].split("```", 1)[0]
-        elif "```" in text:
-            text = text.split("```", 1)[1].split("```", 1)[0]
-        parsed = json.loads(text.strip())
-    except Exception as e:
-        parsed = {"munger_inversion_summary": claude_output[:500], "parse_error": str(e)}
+    from engine.guardrails import validate_inversion
+    parsed, parse_errors = validate_inversion(claude_output)
+    if parse_errors:
+        parsed["parse_errors"] = parse_errors
+    if not parsed.get("munger_inversion_summary"):
+        parsed["munger_inversion_summary"] = claude_output[:500]
 
     metrics = []
     findings = []

@@ -55,6 +55,7 @@ def analyze(
     max_tokens: int = 4000,
     max_retries: int = 2,
     raise_on_error: bool = False,
+    metrics_context: dict | None = None,
 ) -> tuple[str, float]:
     """
     Call Claude with system+user prompts.
@@ -65,6 +66,17 @@ def analyze(
         if raise_on_error:
             raise ClaudeError("ANTHROPIC_API_KEY missing")
         return "[ANTHROPIC_API_KEY missing — cannot analyze]", 0.0
+
+    # Rate-limit guard — catches runaway loops before they punch through quotas
+    try:
+        from shared.ratelimit import require_token, RateLimitExceeded
+        require_token("claude")
+    except ImportError:
+        pass
+    except Exception as e:
+        if raise_on_error:
+            raise
+        return f"[Claude rate-limit: {e}]", 0.0
 
     m = model or cfg.claude_model
     client = Anthropic(api_key=keys.anthropic)
@@ -82,6 +94,18 @@ def analyze(
             text = "\n".join(parts).strip()
             usage = response.usage
             cost = _estimate_cost(m, usage.input_tokens, usage.output_tokens)
+
+            # Log metrics — never raises
+            try:
+                from shared.metrics import log_cost
+                log_cost(
+                    cfg, provider="claude", model=m, cost_usd=cost,
+                    input_tok=usage.input_tokens, output_tok=usage.output_tokens,
+                    **(metrics_context or {}),
+                )
+            except Exception:
+                pass
+
             return text, cost
 
         except Exception as e:  # noqa: BLE001

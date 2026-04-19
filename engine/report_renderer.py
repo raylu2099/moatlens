@@ -97,20 +97,18 @@ def render_markdown(report: AuditReport) -> str:
                 lines.append(f"- **{k}**: {v}")
         lines.append("")
 
-    # Raw data collapse
+    # Audit snapshot link (the full JSON lives alongside as <ticker>/<date>.json
+    # — don't embed 50KB of JSON inside the human-readable markdown)
     lines.append("---")
     lines.append("")
-    lines.append("<details>")
-    lines.append("<summary>📦 Audit Snapshot (raw data, for reproducibility)</summary>")
-    lines.append("")
-    lines.append("```json")
-    lines.append(report.model_dump_json(indent=2))
-    lines.append("```")
-    lines.append("</details>")
+    lines.append(
+        f"📦 完整 audit snapshot 见 `{report.ticker}/{report.audit_date}.json` "
+        "(同目录下的 JSON 文件) —— 可用于 diff 或第三方工具分析。"
+    )
     lines.append("")
     lines.append("---")
     lines.append("")
-    lines.append("*This is educational analysis, not investment advice. Do your own research.*")
+    lines.append("*教育性分析，不构成投资建议。自行决策。*")
 
     return "\n".join(lines)
 
