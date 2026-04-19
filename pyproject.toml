@@ -1,0 +1,31 @@
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+exclude = [".git", "__pycache__", ".venv", "venv", "data", "docs", "prompts"]
+
+[tool.ruff.lint]
+# Keep it lean — style only, not opinionated.
+select = [
+    "E",    # pycodestyle errors
+    "F",    # pyflakes (unused imports, undefined names)
+    "W",    # pycodestyle warnings
+    "I",    # isort (import order)
+    "B",    # bugbear (common bug patterns)
+    "UP",   # pyupgrade (modernize syntax)
+]
+ignore = [
+    "E501",   # line too long — handled by formatter, warnings too noisy
+    "B008",   # function call in default arg — FastAPI uses Depends() as default
+    "B904",   # "raise from" — we don't always need the chain
+]
+
+[tool.ruff.lint.isort]
+known-first-party = ["engine", "cli", "web", "shared"]
+
+[tool.ruff.format]
+quote-style = "double"
+line-ending = "lf"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"

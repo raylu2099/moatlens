@@ -7,8 +7,53 @@ on:
     branches: [main]
 
 jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - name: Install ruff
+        run: pip install ruff
+      - name: Lint
+        run: ruff check .
+      - name: Format check
+        run: ruff format --check .
+
+  wisdom-yaml:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - name: Install deps
+        run: pip install pyyaml
+      - name: Validate wisdom.yaml structure
+        run: |
+          python - <<'EOF'
+          import sys, yaml
+          with open("prompts/wisdom.yaml", encoding="utf-8") as f:
+              data = yaml.safe_load(f)
+          assert isinstance(data, list), "wisdom.yaml must be a list"
+          assert len(data) >= 20, f"only {len(data)} quotes, expected ≥ 20"
+          ids = set()
+          required = {"id", "author", "text_cn", "text_en", "source", "themes"}
+          for q in data:
+              assert isinstance(q, dict), f"quote is not a dict: {q}"
+              missing = required - q.keys()
+              assert not missing, f"quote {q.get('id')} missing fields: {missing}"
+              assert q["id"] not in ids, f"duplicate id: {q['id']}"
+              ids.add(q["id"])
+          print(f"OK — {len(data)} quotes, all required fields present, no dup ids")
+          EOF
+
   pytest:
     runs-on: ubuntu-latest
+    needs: [lint, wisdom-yaml]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5

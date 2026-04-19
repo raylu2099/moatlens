@@ -1,0 +1,44 @@
+# Pre-commit hooks for Moatlens
+#
+# Install once: pip install pre-commit && pre-commit install
+# Runs on every `git commit` — blocks bad commits locally instead of bouncing through CI.
+# Skip with `git commit --no-verify` if truly needed (don't make a habit).
+
+repos:
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.6.9
+    hooks:
+      # Lint first
+      - id: ruff
+        args: [--fix, --exit-non-zero-on-fix]
+      # Then format
+      - id: ruff-format
+
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      - id: check-yaml
+        # Block malformed prompts/wisdom.yaml before it hits the app
+        files: \.(yaml|yml)$
+      - id: check-added-large-files
+        args: [--maxkb=500]
+      - id: check-merge-conflict
+      - id: end-of-file-fixer
+      - id: trailing-whitespace
+      - id: debug-statements
+
+  - repo: local
+    hooks:
+      - id: wisdom-yaml-loads
+        name: wisdom.yaml loads and has ≥20 quotes
+        entry: python -c "import sys; sys.path.insert(0,'.'); from shared.config import load_config; from engine.wisdom import load_wisdom; qs=load_wisdom(load_config()); assert len(qs)>=20, f'only {len(qs)} quotes'; print(f'OK — {len(qs)} quotes')"
+        language: system
+        pass_filenames: false
+        files: ^prompts/wisdom\.yaml$
+
+      - id: pytest-fast
+        name: pytest (fast subset)
+        entry: bash -c 'export MAMBA_ROOT_PREFIX=/volume1/homes/hellolufeng/micromamba && /volume1/homes/hellolufeng/bin/micromamba run -n ytdlp python -m pytest tests/ -x -q --ignore=tests/test_stream_adapter.py --ignore=tests/test_coach.py'
+        language: system
+        pass_filenames: false
+        stages: [pre-commit]
