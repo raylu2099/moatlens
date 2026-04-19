@@ -1,0 +1,42 @@
+{% extends "base.html" %}
+{% block title %}智慧语录 — Moatlens{% endblock %}
+{% block content %}
+
+<div class="max-w-4xl mx-auto">
+    <div class="flex justify-between items-end mb-6">
+        <div>
+            <h1 class="text-3xl font-bold">💭 大师智慧</h1>
+            <p class="text-gray-400 mt-1">Buffett · Munger · Marks · Graham · Bolton · Lynch — 的原话与提醒</p>
+        </div>
+        <div class="text-sm text-gray-500">共 {{ total }} 条</div>
+    </div>
+
+    <p class="bg-ink-800 border-l-4 border-gold pl-4 pr-4 py-3 mb-8 text-sm text-gray-300">
+        <em>价值投资的敌人是自己的冲动和过度自信。这些语录不是壁纸，是守门员。
+        每次你快做决定时，它们会在对应时机出现。</em>
+    </p>
+
+    {% for theme, quotes in grouped %}
+    <section class="mb-8">
+        <h2 class="text-xl font-bold text-gold mb-3 border-b border-ink-700 pb-2">
+            {{ theme_label.get(theme, theme) }}
+            <span class="text-xs text-gray-500 font-normal ml-2">{{ quotes | length }} 条</span>
+        </h2>
+        <div class="space-y-3">
+            {% for q in quotes %}
+            <a href="/wisdom/{{ q.id }}" class="block bg-ink-800 border border-ink-700 hover:border-gold rounded-lg p-4 transition">
+                <div class="text-base text-gray-100">{{ q.text_cn }}</div>
+                <div class="text-xs text-gray-500 mt-2">
+                    — <strong class="text-gray-400">{{ q.author }}</strong>{% if q.source %}，{{ q.source }}{% endif %}
+                </div>
+                {% if q.ray_note %}
+                <div class="text-xs text-gold/80 mt-2 italic">Ray 批注：{{ q.ray_note }}</div>
+                {% endif %}
+            </a>
+            {% endfor %}
+        </div>
+    </section>
+    {% endfor %}
+</div>
+
+{% endblock %}

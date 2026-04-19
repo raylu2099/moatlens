@@ -1,0 +1,513 @@
+# Moatlens 大师语录库
+#
+# 字段：
+#   id:        唯一稳定标识（下划线命名）
+#   author:    作者（英文原名）
+#   text_en:   英文原文（尽量第一手出处）
+#   text_cn:   中文翻译（优先采用官方中译本；无官译时用尽量贴原意的版本）
+#   source:    出处（股东信年份 / 书名章节 / memo 标题）
+#   themes:    主题标签（competence/moat/management/valuation/margin_of_safety/
+#              asymmetry/variant_view/inversion/patience/contrarian/emotion/
+#              loss/sell_discipline/humility/long_term/cash）
+#   stages:    适用于哪些 stage 结尾出现（空数组 = 不主动在 stage 出现）
+#   triggers:  决策点触发标签（low_mos_buy / thesis_very_stale / action_avoid /
+#              holding_in_sell_zone / high_mos / action_buy / watch_long）
+#   ray_note:  Ray 的批注（可选，空字符串）
+#
+# 添加新语录时保持 id 稳定（不要重排）——代码用 id 引用。
+
+# ============================================================================
+# Warren Buffett — 能力圈 / 长期 / 优秀生意 / 耐心
+# ============================================================================
+
+- id: buffett_competence_edge_1996
+  author: Warren Buffett
+  text_en: "What counts for most people in investing is not how much they know, but rather how realistically they define what they don't know. An investor needs to do very few things right as long as he or she avoids big mistakes."
+  text_cn: "投资最重要的不是你知道多少，而是能够多诚实地定义你不知道的东西。投资者只需要做好很少几件事就够了——前提是避开重大错误。"
+  source: "Berkshire Hathaway 1992 致股东的信"
+  themes: [competence, humility]
+  stages: [1]
+  triggers: []
+  ray_note: "能力圈的边界比大小重要 —— 老话但每次读都刺痛。"
+
+- id: buffett_circle_edge_size
+  author: Warren Buffett
+  text_en: "Investors should understand the edge of their circle of competence is much more important than its size."
+  text_cn: "投资者必须懂得——能力圈的边界比能力圈本身的大小重要得多。"
+  source: "Berkshire Hathaway 1996 致股东的信"
+  themes: [competence, humility]
+  stages: [1]
+  triggers: []
+  ray_note: ""
+
+- id: buffett_wonderful_at_fair
+  author: Warren Buffett
+  text_en: "It's far better to buy a wonderful company at a fair price than a fair company at a wonderful price."
+  text_cn: "以合理的价格买入一家伟大的公司，远远好过以便宜的价格买入一家平庸的公司。"
+  source: "Berkshire Hathaway 1989 致股东的信"
+  themes: [moat, valuation, long_term]
+  stages: [3, 6]
+  triggers: []
+  ray_note: "对抗'便宜就是好'的执念。"
+
+- id: buffett_forever_holding
+  author: Warren Buffett
+  text_en: "Our favorite holding period is forever."
+  text_cn: "我们最偏好的持有期是：永远。"
+  source: "Berkshire Hathaway 1988 致股东的信"
+  themes: [patience, long_term]
+  stages: []
+  triggers: [thesis_very_stale]
+  ray_note: ""
+
+- id: buffett_big_money_waiting
+  author: Warren Buffett
+  text_en: "The stock market is a device for transferring money from the impatient to the patient."
+  text_cn: "股市是一种把财富从没有耐心的人手里转移到有耐心的人手里的机器。"
+  source: "多次引用，最早出处模糊，1994 BHS 年会记录"
+  themes: [patience, long_term]
+  stages: []
+  triggers: []
+  ray_note: ""
+
+- id: buffett_fearful_greedy
+  author: Warren Buffett
+  text_en: "Be fearful when others are greedy, and greedy when others are fearful."
+  text_cn: "别人贪婪时你要恐惧，别人恐惧时你要贪婪。"
+  source: "Berkshire Hathaway 2004 致股东的信"
+  themes: [contrarian, emotion]
+  stages: [7]
+  triggers: [low_mos_buy, high_mos]
+  ray_note: ""
+
+- id: buffett_price_value
+  author: Warren Buffett
+  text_en: "Price is what you pay. Value is what you get."
+  text_cn: "价格是你付出的，价值是你得到的。"
+  source: "Berkshire Hathaway 2008 致股东的信"
+  themes: [valuation, margin_of_safety]
+  stages: [6, 7]
+  triggers: []
+  ray_note: ""
+
+- id: buffett_rule_1_2
+  author: Warren Buffett
+  text_en: "Rule No. 1: Never lose money. Rule No. 2: Never forget Rule No. 1."
+  text_cn: "第一条规则：永远不要亏钱。第二条规则：永远不要忘记第一条。"
+  source: "公开采访多次出现，最早 1985 年左右"
+  themes: [margin_of_safety, loss, humility]
+  stages: [7]
+  triggers: [action_avoid, low_mos_buy]
+  ray_note: "不是说不能亏短期钱，是说不能亏**本金**（永久性损失）。"
+
+- id: buffett_diversification_ignorance
+  author: Warren Buffett
+  text_en: "Diversification is protection against ignorance. It makes little sense if you know what you are doing."
+  text_cn: "分散投资是对无知的保护。如果你真的知道自己在做什么，分散意义不大。"
+  source: "1997 BHS 年会问答"
+  themes: [competence, long_term]
+  stages: []
+  triggers: []
+  ray_note: ""
+
+- id: buffett_time_friend_wonderful
+  author: Warren Buffett
+  text_en: "Time is the friend of the wonderful company, the enemy of the mediocre."
+  text_cn: "时间是优秀公司的朋友，是平庸公司的敌人。"
+  source: "Berkshire Hathaway 1989 致股东的信"
+  themes: [moat, long_term]
+  stages: [3]
+  triggers: []
+  ray_note: ""
+
+- id: buffett_reputation_5min
+  author: Warren Buffett
+  text_en: "It takes 20 years to build a reputation and five minutes to ruin it."
+  text_cn: "建立一个声誉需要 20 年，毁掉它只需要 5 分钟。"
+  source: "公开演讲多次"
+  themes: [management, integrity]
+  stages: [4]
+  triggers: []
+  ray_note: ""
+
+- id: buffett_inactivity_intelligent
+  author: Warren Buffett
+  text_en: "Inactivity strikes us as intelligent behavior."
+  text_cn: "不作为在我们看来是一种高智商行为。"
+  source: "Berkshire Hathaway 1996 致股东的信"
+  themes: [patience, sell_discipline]
+  stages: []
+  triggers: [holding_in_sell_zone]
+  ray_note: ""
+
+- id: buffett_owner_earnings_accounting
+  author: Warren Buffett
+  text_en: "Accounting earnings are an opinion. Cash flow is a fact."
+  text_cn: "会计利润是一种观点，现金流才是事实。"
+  source: "多次引用，最早收入 Berkshire 1986 附录"
+  themes: [management, integrity]
+  stages: [2, 5]
+  triggers: []
+  ray_note: "—— 提醒自己别被会计利润骗了，看 OCF、看 Owner Earnings。"
+
+# ============================================================================
+# Charlie Munger — 反过来想 / 多元心智模型 / Lollapalooza / 好生意
+# ============================================================================
+
+- id: munger_invert_always_invert
+  author: Charlie Munger
+  text_en: "Invert, always invert. Turn a situation or problem upside down. Look at it backwards."
+  text_cn: "反过来想，总是反过来想。把问题倒过来看，从结局推回起点。"
+  source: "Poor Charlie's Almanack（中译《穷查理宝典》李录版）"
+  themes: [inversion, humility]
+  stages: [8]
+  triggers: []
+  ray_note: "'我怎么死在这笔投资上' 比 '我怎么从中赚钱' 有用 10 倍。"
+
+- id: munger_wonderful_business_once
+  author: Charlie Munger
+  text_en: "All I want to know is where I'm going to die, so I'll never go there."
+  text_cn: "我只想知道我将来会死在哪里，好让我永远不去那个地方。"
+  source: "多次演讲；《穷查理宝典》"
+  themes: [inversion, humility, loss]
+  stages: [8]
+  triggers: []
+  ray_note: ""
+
+- id: munger_sit_on_ass_investing
+  author: Charlie Munger
+  text_en: "The big money is not in the buying and selling, but in the waiting."
+  text_cn: "大钱不在买和卖里，而在等待里。"
+  source: "《穷查理宝典》Poor Charlie's Almanack"
+  themes: [patience, long_term]
+  stages: []
+  triggers: [thesis_very_stale, holding_in_sell_zone]
+  ray_note: ""
+
+- id: munger_lollapalooza
+  author: Charlie Munger
+  text_en: "I call this the Lollapalooza effect — when several tendencies combine, they can produce truly extreme outcomes."
+  text_cn: "当多个心理倾向同时叠加，就会产生所谓'叠加效应（Lollapalooza）'——真正极端的结果由此而生。"
+  source: "Harvard Law School 1995 演讲；《穷查理宝典》"
+  themes: [moat]
+  stages: [3]
+  triggers: []
+  ray_note: ""
+
+- id: munger_incentives_bias
+  author: Charlie Munger
+  text_en: "Never, ever, think about something else when you should be thinking about the power of incentives."
+  text_cn: "当你应该思考激励机制的力量时，千万、千万、千万不要去想别的。"
+  source: "Harvard Law School 1995 演讲"
+  themes: [management]
+  stages: [4]
+  triggers: []
+  ray_note: "审视管理层 = 审视他们的激励结构。"
+
+- id: munger_worldly_wisdom
+  author: Charlie Munger
+  text_en: "You need a different checklist and different mental models for different companies. I can never make it easy by saying, 'Here are three things.'"
+  text_cn: "不同的公司需要不同的检查清单和不同的心智模型。我从来没法简化成'就这三件事'。"
+  source: "USC Business School 1994 演讲"
+  themes: [competence, humility]
+  stages: [1]
+  triggers: []
+  ray_note: ""
+
+- id: munger_mimicking_crowd
+  author: Charlie Munger
+  text_en: "Mimicking the herd invites regression to the mean."
+  text_cn: "模仿人群，只会让你的回报向平均值回归。"
+  source: "USC Business School 1994 演讲"
+  themes: [contrarian, variant_view]
+  stages: [7, 8]
+  triggers: []
+  ray_note: ""
+
+- id: munger_dont_just_do_something
+  author: Charlie Munger
+  text_en: "Don't just do something, stand there."
+  text_cn: "不要'做点什么'，就站在那儿。"
+  source: "多次演讲，改自美国海军老话"
+  themes: [patience, sell_discipline, emotion]
+  stages: []
+  triggers: [holding_in_sell_zone, action_buy]
+  ray_note: "按住手别动，往往是最好的决策。"
+
+- id: munger_stress_test_psychology
+  author: Charlie Munger
+  text_en: "If you're not willing to react with equanimity to a market price decline of 50% two or three times a century, you're not fit to be a common shareholder."
+  text_cn: "如果你不能坦然接受一百年里两到三次 50% 的市场下跌，你就不适合当股东。"
+  source: "2011 BHS 年会"
+  themes: [emotion, loss, long_term]
+  stages: []
+  triggers: [action_avoid]
+  ray_note: ""
+
+- id: munger_envy_not_greed
+  author: Charlie Munger
+  text_en: "The great defense against envy is to simply avoid it. Don't keep score against others."
+  text_cn: "对抗嫉妒最好的办法就是躲开它。不要拿自己的回报和别人比分数。"
+  source: "《穷查理宝典》"
+  themes: [emotion, humility]
+  stages: []
+  triggers: []
+  ray_note: "别人涨停你平盘，要稳住。"
+
+- id: munger_hold_wonderful_forever
+  author: Charlie Munger
+  text_en: "If you buy a business just because it's undervalued, then you have to worry about selling it when it reaches its intrinsic value. But if you can buy a few great companies, then you can sit on your ass. That's a good thing."
+  text_cn: "如果你只因为便宜而买一家公司，你就得操心它涨到内在价值时怎么卖。但如果你能买到少数几家伟大的公司，你就可以安心坐下不动——这是件好事。"
+  source: "1998 BHS 年会"
+  themes: [moat, long_term, sell_discipline]
+  stages: [3]
+  triggers: [holding_in_sell_zone]
+  ray_note: ""
+
+# ============================================================================
+# Howard Marks — 非对称 / 非共识 / 二阶思维 / 风险
+# ============================================================================
+
+- id: marks_correct_nonconsensus
+  author: Howard Marks
+  text_en: "To earn superior returns, you must hold a non-consensus view regarding the investment's prospects, and that view must be correct."
+  text_cn: "想要获得超额收益，你必须同时具备两个条件：一是你的看法与共识不同，二是你的看法是正确的。"
+  source: "The Most Important Thing（中译《投资最重要的事》第 11 章）"
+  themes: [asymmetry, variant_view, contrarian]
+  stages: [7, 8]
+  triggers: [low_mos_buy, action_buy]
+  ray_note: "没有 variant view，你不配拿超额收益 —— 真的。"
+
+- id: marks_second_level_thinking
+  author: Howard Marks
+  text_en: "First-level thinking says, 'It's a good company; let's buy the stock.' Second-level thinking says, 'It's a good company, but everyone thinks it's a great company, and it's not. So the stock's overrated and overpriced; let's sell.'"
+  text_cn: "一阶思维说：'这是家好公司，买。'二阶思维说：'这是家好公司，但所有人都以为它是伟大公司——它不是。所以股票被高估了，卖。'"
+  source: "The Most Important Thing 第 1 章"
+  themes: [variant_view, contrarian]
+  stages: [7]
+  triggers: [action_buy]
+  ray_note: ""
+
+- id: marks_risk_not_volatility
+  author: Howard Marks
+  text_en: "Risk means more things can happen than will happen."
+  text_cn: "风险的本质是：可能发生的事情，比实际会发生的事情多。"
+  source: "The Most Important Thing 第 5 章"
+  themes: [margin_of_safety, loss]
+  stages: [7, 8]
+  triggers: []
+  ray_note: "不是波动性，是可能性的分布。"
+
+- id: marks_cheap_can_get_cheaper
+  author: Howard Marks
+  text_en: "Being too far ahead of your time is indistinguishable from being wrong."
+  text_cn: "过早正确，和错误没有区别。"
+  source: "Memo: Dare to Be Great II（2014）"
+  themes: [patience, contrarian, loss]
+  stages: []
+  triggers: [action_avoid, watch_long]
+  ray_note: "价值陷阱是便宜变更便宜。等市场也认可你，才算赢。"
+
+- id: marks_skill_vs_luck
+  author: Howard Marks
+  text_en: "You can't predict. You can prepare."
+  text_cn: "你无法预测，但你可以准备。"
+  source: "Memo: You Can't Predict. You Can Prepare.（2001）"
+  themes: [humility, margin_of_safety]
+  stages: [7]
+  triggers: []
+  ray_note: ""
+
+- id: marks_pendulum_extremes
+  author: Howard Marks
+  text_en: "In the real world, things generally fluctuate between 'pretty good' and 'not so hot.' But in the world of investing, perception often swings from 'flawless' to 'hopeless.'"
+  text_cn: "现实里事情大多在'还不错'和'不太好'之间摆动；但在投资世界里，情绪在'完美无瑕'和'毫无希望'两极之间剧烈摆动。"
+  source: "The Most Important Thing 第 9 章（钟摆）"
+  themes: [emotion, contrarian]
+  stages: [7, 8]
+  triggers: []
+  ray_note: ""
+
+- id: marks_most_dangerous_words
+  author: Howard Marks
+  text_en: "The six most dangerous words in investing are: 'This time it's different.'"
+  text_cn: "投资里最危险的六个字：'这次不一样'。"
+  source: "Memo: The Most Important Thing Illuminated（改自 John Templeton）"
+  themes: [humility, emotion]
+  stages: [6, 7]
+  triggers: [low_mos_buy]
+  ray_note: "每次泡沫都是用这句话辩护的。"
+
+- id: marks_asymmetric_payoff
+  author: Howard Marks
+  text_en: "The goal of investment isn't to achieve average returns; you want to do better than average. Thus, your thinking has to be better than that of others — more powerful. Oaktree's motto is: 'If we avoid the losers, the winners take care of themselves.'"
+  text_cn: "投资的目标不是达到平均回报，而是超过平均。所以你的思考必须比别人更强——更深、更精。Oaktree 的座右铭是：'避开输家，赢家会自己照顾自己。'"
+  source: "Memo: Investment Wisdom"
+  themes: [asymmetry, variant_view, loss]
+  stages: [7, 8]
+  triggers: []
+  ray_note: ""
+
+# ============================================================================
+# Benjamin Graham — 安全边际 / Mr. Market
+# ============================================================================
+
+- id: graham_margin_of_safety
+  author: Benjamin Graham
+  text_en: "The margin of safety is always dependent on the price paid. It will be large at one price, small at some higher price, nonexistent at some still higher price."
+  text_cn: "安全边际永远取决于你付出的价格。同一只股票，低价时安全边际很大，价格稍高就变小，再高一点就完全消失。"
+  source: "The Intelligent Investor 第 20 章（中译《聪明的投资者》）"
+  themes: [margin_of_safety, valuation]
+  stages: [6, 7]
+  triggers: [low_mos_buy, high_mos]
+  ray_note: "同一家公司，涨 30% 就从好买点变成不碰。价格决定一切。"
+
+- id: graham_mr_market_moodswings
+  author: Benjamin Graham
+  text_en: "Mr. Market's job is to provide you with prices; your job is to decide whether it is to your advantage to act on them."
+  text_cn: "市场先生的职责是报价；你的职责是判断是否对你有利再行动——而不是被他的情绪牵着走。"
+  source: "The Intelligent Investor 第 8 章"
+  themes: [emotion, valuation, contrarian]
+  stages: [6, 7]
+  triggers: [low_mos_buy]
+  ray_note: ""
+
+- id: graham_short_term_voting
+  author: Benjamin Graham
+  text_en: "In the short run, the market is a voting machine, but in the long run, it is a weighing machine."
+  text_cn: "短期来看，市场是一台投票机；长期来看，它是一台称重机。"
+  source: "Security Analysis（1934）"
+  themes: [patience, long_term, valuation]
+  stages: []
+  triggers: [thesis_very_stale]
+  ray_note: "—— 长期它会还你公道，前提是你真的买到了价值。"
+
+- id: graham_defensive_aggressive
+  author: Benjamin Graham
+  text_en: "An investment operation is one which, upon thorough analysis, promises safety of principal and a satisfactory return. Operations not meeting these requirements are speculative."
+  text_cn: "投资是指：经过深入分析之后，能够保障本金安全、并带来满意回报的操作。不符合这一要求的都是投机。"
+  source: "Security Analysis（1934）"
+  themes: [margin_of_safety, loss]
+  stages: [1, 7]
+  triggers: []
+  ray_note: ""
+
+# ============================================================================
+# Anthony Bolton — 逆向 / 情绪纪律
+# ============================================================================
+
+- id: bolton_contrarian_uncomfortable
+  author: Anthony Bolton
+  text_en: "Contrarian investing means doing the right thing when it feels wrong. If it feels comfortable, you're probably just following the crowd."
+  text_cn: "逆向投资就是在感觉'不对'的时候做对的事。如果你感觉'很舒服'，那你大概只是在随大流。"
+  source: "Investing Against the Tide（中译《逆向投资大师》）"
+  themes: [contrarian, emotion, variant_view]
+  stages: [7, 8]
+  triggers: [low_mos_buy, high_mos]
+  ray_note: ""
+
+- id: bolton_best_time_sell_shine
+  author: Anthony Bolton
+  text_en: "The best time to sell is often when everything looks most positive."
+  text_cn: "最好的卖出时机，往往是一切看起来最光鲜的时候。"
+  source: "Investing Against the Tide"
+  themes: [sell_discipline, contrarian]
+  stages: []
+  triggers: [holding_in_sell_zone]
+  ray_note: ""
+
+- id: bolton_good_business_bad_time
+  author: Anthony Bolton
+  text_en: "The key insight: great businesses sometimes trade at bad-business prices — but only briefly, and only during maximum pessimism."
+  text_cn: "关键洞察：伟大的公司有时会以平庸公司的价格交易——但这种机会短暂，而且只出现在最悲观的时刻。"
+  source: "Investing Against the Tide"
+  themes: [contrarian, moat, margin_of_safety]
+  stages: [7]
+  triggers: [high_mos]
+  ray_note: ""
+
+# ============================================================================
+# Peter Lynch — 懂你持有的 / 常识
+# ============================================================================
+
+- id: lynch_know_what_you_own
+  author: Peter Lynch
+  text_en: "Know what you own, and know why you own it."
+  text_cn: "搞清楚你拥有什么，以及为什么拥有它。"
+  source: "One Up on Wall Street（中译《彼得林奇的成功投资》）"
+  themes: [competence, humility]
+  stages: [1, 8]
+  triggers: [thesis_very_stale]
+  ray_note: ""
+
+- id: lynch_story_investing
+  author: Peter Lynch
+  text_en: "Never invest in any idea you can't illustrate with a crayon."
+  text_cn: "永远不要投资你没法用蜡笔讲明白的想法。"
+  source: "One Up on Wall Street"
+  themes: [competence, humility]
+  stages: [1]
+  triggers: []
+  ray_note: "说不清的生意 = 不在能力圈里。"
+
+- id: lynch_bigger_than_market
+  author: Peter Lynch
+  text_en: "The real key to making money in stocks is not to get scared out of them."
+  text_cn: "在股市里真正赚到钱的关键，是不要被吓出去。"
+  source: "One Up on Wall Street"
+  themes: [emotion, long_term, loss]
+  stages: []
+  triggers: [action_avoid]
+  ray_note: ""
+
+# ============================================================================
+# Seth Klarman — 安全边际 / 耐心 / 独立思考
+# ============================================================================
+
+- id: klarman_price_reflects_everything
+  author: Seth Klarman
+  text_en: "Value investing is the discipline of buying securities at a significant discount from their current underlying values and holding them until more of their value is realized."
+  text_cn: "价值投资是一种纪律：以远低于其内在价值的价格买入证券，持有到价值被充分体现为止。"
+  source: "Margin of Safety（1991）"
+  themes: [margin_of_safety, patience, valuation]
+  stages: [6, 7]
+  triggers: []
+  ray_note: ""
+
+- id: klarman_avoid_panic_selling
+  author: Seth Klarman
+  text_en: "The single greatest edge an investor can have is a long-term orientation."
+  text_cn: "一个投资者能拥有的最大优势，就是长期导向。"
+  source: "Baupost Group 2017 股东信"
+  themes: [long_term, patience]
+  stages: []
+  triggers: [thesis_very_stale, action_avoid]
+  ray_note: ""
+
+# ============================================================================
+# Nassim Taleb — 不确定性 / 脆弱/反脆弱
+# ============================================================================
+
+- id: taleb_absence_evidence
+  author: Nassim Nicholas Taleb
+  text_en: "Absence of evidence is not evidence of absence."
+  text_cn: "没有证据，不等于证据证明'没有'。"
+  source: "Fooled by Randomness（中译《随机漫步的傻瓜》）"
+  themes: [humility, inversion]
+  stages: [8]
+  triggers: []
+  ray_note: "没找到风险 ≠ 没有风险。"
+
+# ============================================================================
+# 综合 / 纪律类
+# ============================================================================
+
+- id: ray_own_note_ai_moat
+  author: Moatlens (self-discipline)
+  text_en: "A moat that looks AI-proof today may evaporate in 18 months. Ask: what would I see 6 months before that evaporation?"
+  text_cn: "今天看起来'AI 防护盾'的护城河，可能 18 个月内就蒸发。问自己：在它蒸发前 6 个月，我会看到什么信号？"
+  source: "Moatlens 自我纪律 —— Ray 写给未来的自己"
+  themes: [moat, inversion]
+  stages: [3, 8]
+  triggers: []
+  ray_note: "这不是大师语录，是我自己的——提醒我 tech stock 的护城河可能比想象中脆。"

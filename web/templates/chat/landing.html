@@ -1,0 +1,66 @@
+{% extends "base.html" %}
+{% block title %}Moatlens — 对话教练{% endblock %}
+{% block content %}
+
+<div class="max-w-3xl mx-auto">
+    <div class="text-center mt-8 mb-10">
+        <h1 class="text-4xl font-bold mb-3">
+            <span class="text-gold">◆</span> 价值投资审视教练
+        </h1>
+        <p class="text-gray-400">像有一位 Buffett / Munger 的学生陪你一起审视一支股票</p>
+    </div>
+
+    <form method="POST" action="/chat/start" class="bg-ink-800 border border-ink-700 rounded-xl p-6 shadow-lg">
+        <label class="block text-sm text-gray-400 mb-2">
+            🎯 你想审视哪只股票？<span class="text-gray-600 ml-1">(或者描述你的疑问)</span>
+        </label>
+        <input
+            name="input" autofocus required
+            placeholder='例如："AAPL"、"我在看 NVDA"、"审视一下 TSLA"'
+            class="w-full bg-ink-900 border border-ink-700 rounded-lg px-4 py-3 text-white text-lg font-mono"
+        >
+        <div class="flex justify-between items-center mt-4">
+            <div class="text-xs text-gray-500">
+                {% if keys_missing %}
+                <span class="text-red-400">⚠ 缺 API keys：{{ keys_missing | join(", ") }} — 到 <code>.env</code> 里补上</span>
+                {% else %}
+                <span>✓ API keys 就绪 · 一次审视约 $0.3-0.8，3-5 分钟</span>
+                {% endif %}
+            </div>
+            <button type="submit" class="bg-gold hover:bg-yellow-500 text-ink-900 font-bold px-5 py-2 rounded-lg">
+                开始 →
+            </button>
+        </div>
+    </form>
+
+    <div class="mt-4 text-sm text-gray-500">
+        <span class="text-gray-400">试试：</span>
+        <button class="inline-block bg-ink-800 border border-ink-700 px-3 py-1 rounded hover:border-gold mx-1 mt-1" onclick="document.querySelector('input[name=input]').value='AAPL';">AAPL</button>
+        <button class="inline-block bg-ink-800 border border-ink-700 px-3 py-1 rounded hover:border-gold mx-1 mt-1" onclick="document.querySelector('input[name=input]').value='审视 NVDA';">审视 NVDA</button>
+        <button class="inline-block bg-ink-800 border border-ink-700 px-3 py-1 rounded hover:border-gold mx-1 mt-1" onclick="document.querySelector('input[name=input]').value='BRKB';">BRK.B</button>
+        <button class="inline-block bg-ink-800 border border-ink-700 px-3 py-1 rounded hover:border-gold mx-1 mt-1" onclick="document.querySelector('input[name=input]').value='MSFT';">MSFT</button>
+    </div>
+
+    {% if recent_sessions %}
+    <div class="mt-12 pt-6 border-t border-ink-700">
+        <h2 class="text-sm text-gray-500 mb-3">最近的对话</h2>
+        <div class="space-y-2">
+            {% for s in recent_sessions %}
+            <a href="/chat/{{ s.session_id }}" class="block bg-ink-800 border border-ink-700 hover:border-gold rounded px-4 py-2 text-sm flex justify-between items-center">
+                <div>
+                    <span class="text-gold font-mono">{{ s.ticker or "—" }}</span>
+                    <span class="text-gray-500 ml-3 text-xs">{{ s.updated_at[:16].replace("T", " ") }}</span>
+                </div>
+                <span class="text-xs text-gray-500">{{ s.audit_status }}</span>
+            </a>
+            {% endfor %}
+        </div>
+    </div>
+    {% endif %}
+
+    <div class="mt-12 text-center text-xs text-gray-600">
+        <p>教练只会问问题和展示数据 —— 决定还是你自己做。</p>
+    </div>
+</div>
+
+{% endblock %}

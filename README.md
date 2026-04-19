@@ -3,14 +3,20 @@
 > The Buffett / Munger / Howard Marks lens for value investors.
 > A personal AI-assisted stock audit tool that forces you to think deeply before you invest.
 
-## Status — single-user mode (v0.2)
+## Status — single-user, 对话教练模式 (v0.4)
 
-This project intentionally runs **just for you**. There is no login, no multi-tenant database,
-no public signup page. Keys come from `.env`. The web server binds to `127.0.0.1`.
+This project intentionally runs **just for you**. No login, no multi-tenant database.
+Keys come from `.env`. Web server binds to `127.0.0.1`.
 
-The multi-tenant SaaS scaffold from v0.1 lives on the
-[`v0.1-multi-tenant-snapshot`](https://github.com/raylu2099/moatlens/tree/v0.1-multi-tenant-snapshot)
-tag if you ever want to revive it.
+**v0.4 highlights:**
+- **Conversational coach UX** — `/` is a single chat box; the coach streams stage results + master quotes as it runs
+- **Wisdom library** — `/wisdom` hosts 45 curated quotes from Buffett / Munger / Marks / Bolton / Graham / Lynch / Klarman / Taleb, in Chinese + English, with sources
+- **Context-aware quotes** — each stage ends with a topic-matched quote; decision points (low margin-of-safety, stale thesis, etc.) trigger reminders
+- CLI (`python -m cli audit TICKER`) works unchanged
+
+Git tags for snapshot history:
+- `v0.1-multi-tenant-snapshot` — original SaaS scaffold
+- `v0.3-pre-coach-snapshot` — pre-chat single-user v0.3
 
 ## What it does
 
@@ -36,11 +42,20 @@ and at what price you'd buy.
 
 ```bash
 ./setup.sh                             # creates venv, installs deps, copies .env.example
-# edit .env, then:
-python bin/doctor.py                   # verify keys and connectivity
-python -m cli audit AAPL --tech        # run 8-stage audit
-python -m cli diff AAPL                # compare latest vs previous audit
+# edit .env with your ANTHROPIC_API_KEY / PERPLEXITY_API_KEY / FINANCIAL_DATASETS_API_KEY
+python bin/doctor.py                   # verify keys + connectivity
+
+# CLI
+python -m cli audit AAPL --tech        # full audit
+python -m cli audit AAPL --only 6      # re-run just Stage 6 (DCF tuning)
+python -m cli audit AAPL --no-claude   # zero-cost dry run (skip stages 3/4/8)
+python -m cli diff AAPL                # compare latest vs previous
+python -m cli hold add AAPL --size 5%  # track as holding
+
+# Web — 对话教练
 uvicorn web.main:app --host 127.0.0.1 --port 8000
+# 打开 http://127.0.0.1:8000/ 在对话框输入 ticker
+# 浏览语录库: http://127.0.0.1:8000/wisdom
 ```
 
 ## What's in the box
