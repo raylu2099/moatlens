@@ -183,15 +183,15 @@ export MAMBA_ROOT_PREFIX=/volume1/homes/hellolufeng/micromamba && \
 
 Quick smoke for web:
 ```bash
-uvicorn web.main:app --host 127.0.0.1 --port 8000
+uvicorn web.main:app --host 127.0.0.1 --port 48291
 # Then curl /, /api/status, /wisdom, /portfolio
 ```
 
 ### Running on NAS (production-ish)
 
-Current NAS deployment: **tmux session `moatlens-web`**, bound to `0.0.0.0:8000`
-(so Mac on same LAN or Tailscale can reach `http://192.168.31.2:8000` or
-`http://100.114.1.70:8000`).
+Current NAS deployment: **tmux session `moatlens-web`**, bound to `0.0.0.0:48291`
+(so Mac on same LAN or Tailscale can reach `http://192.168.31.2:48291` or
+`http://100.114.1.70:48291`).
 
 Start / restart:
 ```bash
@@ -199,13 +199,13 @@ Start / restart:
 /opt/bin/tmux new-session -d -s moatlens-web \
   "export MAMBA_ROOT_PREFIX=/volume1/homes/hellolufeng/micromamba && \
    exec /volume1/homes/hellolufeng/bin/micromamba run -n ytdlp \
-        uvicorn web.main:app --host 0.0.0.0 --port 8000"
+        uvicorn web.main:app --host 0.0.0.0 --port 48291"
 ```
 
 Check state:
 ```bash
 /opt/bin/tmux ls | grep moatlens-web
-curl -s http://127.0.0.1:8000/api/status
+curl -s http://127.0.0.1:48291/api/status
 /opt/bin/tmux capture-pane -t moatlens-web -p -S -20   # see latest log lines
 ```
 

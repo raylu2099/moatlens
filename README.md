@@ -53,9 +53,9 @@ python -m cli diff AAPL                # compare latest vs previous
 python -m cli hold add AAPL --size 5%  # track as holding
 
 # Web — 对话教练
-uvicorn web.main:app --host 127.0.0.1 --port 8000
-# 打开 http://127.0.0.1:8000/ 在对话框输入 ticker
-# 浏览语录库: http://127.0.0.1:8000/wisdom
+uvicorn web.main:app --host 127.0.0.1 --port 48291
+# 打开 http://127.0.0.1:48291/ 在对话框输入 ticker
+# 浏览语录库: http://127.0.0.1:48291/wisdom
 ```
 
 ## What's in the box
