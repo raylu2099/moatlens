@@ -197,9 +197,12 @@ Start / restart:
 ```bash
 /opt/bin/tmux kill-session -t moatlens-web 2>/dev/null
 /opt/bin/tmux new-session -d -s moatlens-web \
+  -c /volume1/homes/hellolufeng/Drive/moatlens \
   "export MAMBA_ROOT_PREFIX=/volume1/homes/hellolufeng/micromamba && \
    exec /volume1/homes/hellolufeng/bin/micromamba run -n ytdlp \
         uvicorn web.main:app --host 0.0.0.0 --port 48291"
+# 关键：`-c /volume1/.../moatlens` 必须加，否则 tmux 从别的 cwd 启动，
+# uvicorn 找不到 web.main:app，session 立即退出。
 ```
 
 Check state:
