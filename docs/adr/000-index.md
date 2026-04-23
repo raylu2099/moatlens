@@ -19,6 +19,7 @@ code six months from now. Examples: "why no SQLite", "why BYOK was dropped",
 | 006 | SSE over WebSocket for streaming | Accepted | 2026-04-18 |
 | 007 | Conversational-coach UX over form-based | Accepted | 2026-04-18 |
 | 008 | Three-mode landing page | Accepted | 2026-04-18 |
+| 009 | 期权（LEAPS）在审视范围之外 | Accepted | 2026-04-22 |
 
 ## Superseded / historical
 (none yet)
