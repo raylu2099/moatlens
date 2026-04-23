@@ -21,20 +21,25 @@ Also applies Ray's 11 business model quality tests.
 
 This stage invokes Claude (Sonnet) — the most expensive stage but highest value.
 """
+
 from __future__ import annotations
 
 import json
 import time
 
-from engine.models import LensAnalysis, StageResult, Verdict
+from engine.models import StageResult
 from engine.prompts_loader import load_prompt
 from engine.providers import claude as p_claude
 from engine.providers import perplexity as p_pplx
 from engine.providers import yfinance_provider as yfp
 from shared.config import ApiKeys, Config
 
+from ._enrichments import (
+    fda_pipeline_summary,
+    marketaux_sentiment_summary,
+    sec_mda_excerpt,
+)
 from ._helpers import aggregate_verdict, make_metric
-
 
 STAGE_ID = 3
 STAGE_NAME = "护城河深度验证"
@@ -119,8 +124,11 @@ _LEGACY_SYSTEM_PROMPT = """你是一位严格遵循 Charlie Munger 与 Warren Bu
 
 
 def run(
-    cfg: Config, keys: ApiKeys, ticker: str,
-    stage1_raw: dict, tech_mode: bool = False,
+    cfg: Config,
+    keys: ApiKeys,
+    ticker: str,
+    stage1_raw: dict,
+    tech_mode: bool = False,
 ) -> StageResult:
     t0 = time.time()
 
@@ -146,8 +154,12 @@ def run(
         f"defensible in the AI era? Be specific with evidence."
     )
     research_text, sources, pplx_cost = p_pplx.research(
-        cfg, keys, research_prompt,
-        model=cfg.pplx_model_analysis, max_tokens=800, recency="month",
+        cfg,
+        keys,
+        research_prompt,
+        model=cfg.pplx_model_analysis,
+        max_tokens=800,
+        recency="month",
     )
 
     # --- Build Claude prompt ---
@@ -168,11 +180,16 @@ def run(
 根据以上信息，按系统提示词的格式输出 JSON。"""
 
     claude_output, claude_cost = p_claude.analyze(
-        cfg, keys, system_prompt, user_prompt, max_tokens=3000,
+        cfg,
+        keys,
+        system_prompt,
+        user_prompt,
+        max_tokens=3000,
     )
 
     # Parse + validate via pydantic guardrails
     from engine.guardrails import validate_moat
+
     parsed, parse_errors = validate_moat(claude_output)
     if parse_errors:
         parsed["parse_errors"] = parse_errors
@@ -185,18 +202,26 @@ def run(
 
     total_score = parsed.get("total_score")
     if total_score is not None:
-        metrics.append(make_metric(
-            "护城河总分", total_score,
-            "≥ 60 (Munger 标准)",
-            total_score >= 60, unit="/100",
-        ))
+        metrics.append(
+            make_metric(
+                "护城河总分",
+                total_score,
+                "≥ 60 (Munger 标准)",
+                total_score >= 60,
+                unit="/100",
+            )
+        )
 
     bm_score = parsed.get("business_model_score")
     if bm_score is not None:
-        metrics.append(make_metric(
-            "好商业模式 11 条", f"{bm_score}/11",
-            "≥ 7", bm_score >= 7,
-        ))
+        metrics.append(
+            make_metric(
+                "好商业模式 11 条",
+                f"{bm_score}/11",
+                "≥ 7",
+                bm_score >= 7,
+            )
+        )
 
     munger_verdict = parsed.get("munger_verdict", "")
     if munger_verdict:
@@ -209,11 +234,30 @@ def run(
     if parsed.get("weakest_link"):
         findings.append(f"**最弱环节**: {parsed['weakest_link']}")
     if parsed.get("tech_moat_trend"):
-        findings.append(f"**AI 时代趋势**: {parsed['tech_moat_trend']} — {parsed.get('tech_moat_evidence', '')}")
+        findings.append(
+            f"**AI 时代趋势**: {parsed['tech_moat_trend']} — {parsed.get('tech_moat_evidence', '')}"
+        )
     if parsed.get("lollapalooza"):
         findings.append("🎊 **Lollapalooza 效应**: 多个优势叠加，指数级竞争优势")
     if parsed.get("summary_cn"):
         findings.append(f"\n{parsed['summary_cn']}")
+
+    # --- v0.6 enrichments (findings-only, verdict unaffected) ---
+    enrichment_raw = {}
+    mda = sec_mda_excerpt(cfg, keys, ticker)
+    if mda:
+        findings.append("")
+        findings.append(mda)
+    sentiment_line, sentiment_raw = marketaux_sentiment_summary(cfg, keys, ticker, days=90)
+    if sentiment_line:
+        findings.append(sentiment_line)
+    if sentiment_raw:
+        enrichment_raw["marketaux"] = sentiment_raw
+    fda_line, fda_raw = fda_pipeline_summary(cfg, keys, company_name, sector)
+    if fda_line:
+        findings.append(fda_line)
+    if fda_raw:
+        enrichment_raw["fda_pipeline"] = fda_raw
 
     verdict = aggregate_verdict(metrics)
 
@@ -231,6 +275,7 @@ def run(
             "cost_usd": claude_cost + pplx_cost,
             "prompt_slug": PROMPT_SLUG,
             "prompt_version": prompt_version,
+            **({"enrichments": enrichment_raw} if enrichment_raw else {}),
         },
         elapsed_seconds=time.time() - t0,
     )

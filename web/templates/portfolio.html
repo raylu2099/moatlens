@@ -7,6 +7,22 @@
     <div class="text-sm text-gray-500">{{ rows | length }} 只</div>
 </div>
 
+{% set review_rows = rows | selectattr('review_needed') | list %}
+{% if review_rows %}
+<div class="mb-4 bg-amber-900/20 border border-amber-700 text-amber-200 rounded-lg p-4 text-sm">
+    <div class="font-medium mb-1">🔔 {{ review_rows | length }} 只持仓建议重新 audit</div>
+    <div class="text-xs text-amber-300/80">
+        以下股票自上次 audit 后价格变化已超 15%，超过 30 天未更新估值 —
+        Munger 原则是 "inactivity is intelligent"，但"该动时动"。不是止损信号，是提醒你重新看一眼基本面有没有变。
+    </div>
+    <ul class="mt-2 text-xs space-y-0.5">
+        {% for r in review_rows %}
+        <li>• <span class="font-mono text-amber-100">{{ r.ticker }}</span> — {{ r.review_reason }}</li>
+        {% endfor %}
+    </ul>
+</div>
+{% endif %}
+
 {% if not rows %}
 <div class="bg-ink-800 border border-ink-700 rounded-lg p-6 text-center text-gray-400">
     <p class="mb-2">还没有标记任何持仓。</p>
@@ -36,6 +52,9 @@
                 <a href="/audit/{{ r.ticker }}/{{ r.audit_date }}" class="text-gold font-medium">{{ r.ticker }}</a>
                 {% else %}
                 <span class="text-gold">{{ r.ticker }}</span>
+                {% endif %}
+                {% if r.review_needed %}
+                <span class="ml-1 text-amber-400" title="{{ r.review_reason }}">🔔</span>
                 {% endif %}
             </td>
             <td class="px-4 py-3 text-right font-mono">{% if r.price %}${{ "%.2f"|format(r.price) }}{% else %}—{% endif %}</td>

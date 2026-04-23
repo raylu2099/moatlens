@@ -10,7 +10,6 @@
 set -euo pipefail
 
 PROJECT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
-SRC="${PROJECT_DIR}/data"
 DST="${MOATLENS_BACKUP_DIR:-/volume1/homes/hellolufeng/backups/moatlens}"
 KEEP_DAYS="${MOATLENS_BACKUP_KEEP_DAYS:-14}"
 
@@ -19,7 +18,7 @@ SNAPSHOT_DIR="${DST}/${DATE_STAMP}"
 
 mkdir -p "${SNAPSHOT_DIR}"
 
-echo "[$(date -Iseconds)] backing up ${SRC} → ${SNAPSHOT_DIR}"
+echo "[$(date -Iseconds)] backing up ${PROJECT_DIR} → ${SNAPSHOT_DIR}"
 
 # --link-dest makes unchanged files hardlink to yesterday's snapshot → efficient
 YESTERDAY="$(date -d 'yesterday' +%Y-%m-%d 2>/dev/null || date -v -1d +%Y-%m-%d 2>/dev/null || echo "")"
@@ -28,12 +27,20 @@ if [ -n "${YESTERDAY}" ] && [ -d "${DST}/${YESTERDAY}" ]; then
     LINK_DEST_ARG="--link-dest=${DST}/${YESTERDAY}"
 fi
 
+# Back up data/, .env, prompts/, logs/ — everything needed for full restore.
+# Cache is excluded (rebuildable); .git is excluded (GitHub is source of truth).
 rsync -a --delete ${LINK_DEST_ARG} \
-    --exclude='cache/' \
-    "${SRC}/" "${SNAPSHOT_DIR}/"
+    --include='data/' --include='data/**' \
+    --include='prompts/' --include='prompts/**' \
+    --include='logs/' --include='logs/**' \
+    --include='.env' \
+    --exclude='data/cache/**' \
+    --exclude='*' \
+    "${PROJECT_DIR}/" "${SNAPSHOT_DIR}/"
 
 # Prune old snapshots
 find "${DST}" -maxdepth 1 -type d -name '????-??-??' \
     -mtime +"${KEEP_DAYS}" -exec rm -rf {} +
 
 echo "[$(date -Iseconds)] done. kept: $(ls "${DST}" | wc -l) snapshots"
+echo "[$(date -Iseconds)] contents: $(du -sh "${SNAPSHOT_DIR}" | cut -f1) ($(find "${SNAPSHOT_DIR}" -type f | wc -l) files)"

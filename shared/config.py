@@ -3,6 +3,7 @@ Configuration loader. Reads .env, exposes typed config.
 
 Single-user mode: keys come from process env (loaded from .env).
 """
+
 from __future__ import annotations
 
 import os
@@ -10,7 +11,6 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from dotenv import load_dotenv
-
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 load_dotenv(PROJECT_ROOT / ".env")
@@ -22,6 +22,10 @@ class ApiKeys:
     perplexity: str = ""
     financial_datasets: str = ""
     fred: str = ""
+    # v0.6 optional providers — enrich stages if present, skip if missing.
+    sec_api_io: str = ""  # SEC filing text parser (10-K/10-Q MD&A, Risk Factors)
+    finnhub: str = ""  # Insider + analyst consensus
+    marketaux: str = ""  # News sentiment (entity-level)
 
     def has_required(self) -> tuple[bool, list[str]]:
         missing = []
@@ -86,4 +90,7 @@ def load_keys_from_env() -> ApiKeys:
         perplexity=_env("PERPLEXITY_API_KEY"),
         financial_datasets=_env("FINANCIAL_DATASETS_API_KEY"),
         fred=_env("FRED_API_KEY"),
+        sec_api_io=_env("SEC_API_IO_KEY"),
+        finnhub=_env("FINNHUB_API_KEY"),
+        marketaux=_env("MARKETAUX_API_KEY"),
     )

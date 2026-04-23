@@ -1,3 +1,4 @@
+# ruff: noqa: E402 — project-root imports must follow sys.path.insert below
 """
 Moatlens web app v0.5 — three-mode landing + full hardening.
 
@@ -23,12 +24,13 @@ Routes:
 - GET  /learn, /learn/<slug>       knowledge base
 - GET  /api/status                 healthcheck
 """
+
 from __future__ import annotations
 
+import asyncio
 import json
 import re
 import sys
-import asyncio
 from contextlib import asynccontextmanager
 from datetime import date, datetime, timezone
 from hashlib import sha256
@@ -37,7 +39,10 @@ from typing import Annotated
 
 from fastapi import FastAPI, Form, HTTPException, Request
 from fastapi.responses import (
-    HTMLResponse, JSONResponse, RedirectResponse, StreamingResponse,
+    HTMLResponse,
+    JSONResponse,
+    RedirectResponse,
+    StreamingResponse,
 )
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
@@ -45,27 +50,32 @@ from fastapi.templating import Jinja2Templates
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
+from engine import ask as ask_engine
+from engine import wisdom as wisdom_mod
 from engine.orchestrator import run_audit_auto
 from engine.providers import yfinance_provider as yfp
 from engine.report_renderer import render_markdown
 from engine.stream_adapter import stream_audit
-from engine import ask as ask_engine
-from engine import wisdom as wisdom_mod
 from shared.ask import AskSession, load_ask_session, save_ask_session
-from shared.chat import (
-    ChatMessage, ChatSession, cleanup_expired as cleanup_chats,
-    list_sessions, load_session, save_session,
-)
 from shared.ask import cleanup_expired as cleanup_asks
+from shared.chat import (
+    ChatMessage,
+    ChatSession,
+    list_sessions,
+    load_session,
+    save_session,
+)
+from shared.chat import (
+    cleanup_expired as cleanup_chats,
+)
 from shared.config import load_config, load_keys_from_env
-from shared.logging_setup import get_logger, setup_logging
-
-setup_logging()
-log = get_logger("moatlens.web")
 from shared.holdings import is_holding, load_holdings
+from shared.logging_setup import get_logger, setup_logging
 from shared.storage import list_audits, load_audit, load_last_two_audits, save_audit
 from web.diff import render_audit_diff_html
 
+setup_logging()
+log = get_logger("moatlens.web")
 
 cfg = load_config()
 
@@ -100,10 +110,12 @@ def _recover_stale_sessions():
                 sess = load_session(cfg, s["session_id"])
                 if sess:
                     sess.audit_status = "error"
-                    sess.add(ChatMessage.new(
-                        "system",
-                        "⚠️ 服务器重启时这次审视中断了。可以重新发起。",
-                    ))
+                    sess.add(
+                        ChatMessage.new(
+                            "system",
+                            "⚠️ 服务器重启时这次审视中断了。可以重新发起。",
+                        )
+                    )
                     save_session(cfg, sess)
         except Exception:
             continue
@@ -123,6 +135,7 @@ templates.env.globals["app_name"] = "Moatlens"
 # Home (three-mode landing)
 # =====================================================================
 
+
 @app.get("/", response_class=HTMLResponse)
 async def home(request: Request):
     keys = load_keys_from_env()
@@ -134,13 +147,17 @@ async def home(request: Request):
     briefing = _build_briefing(holdings, audits)
     daily_quote = _daily_quote()
 
-    return templates.TemplateResponse(request, "home.html", {
-        "keys_missing": keys_missing,
-        "recent_sessions": recent,
-        "recent_audits": audits,
-        "briefing": briefing,
-        "daily_quote": daily_quote,
-    })
+    return templates.TemplateResponse(
+        request,
+        "home.html",
+        {
+            "keys_missing": keys_missing,
+            "recent_sessions": recent,
+            "recent_audits": audits,
+            "briefing": briefing,
+            "daily_quote": daily_quote,
+        },
+    )
 
 
 def _build_briefing(holdings: list[dict], audits: list[dict]) -> dict | None:
@@ -148,31 +165,39 @@ def _build_briefing(holdings: list[dict], audits: list[dict]) -> dict | None:
     if not holdings:
         return None
     alerts = []
-    held_tickers = {h["ticker"] for h in holdings}
 
     for h in holdings:
         ticker = h["ticker"]
         current, _ = load_last_two_audits(cfg, ticker)
         if not current:
-            alerts.append({
-                "icon": "⚠", "color": "red",
-                "text": f"{ticker} 是持仓但从未 audit —— 补审一次",
-            })
+            alerts.append(
+                {
+                    "icon": "⚠",
+                    "color": "red",
+                    "text": f"{ticker} 是持仓但从未 audit —— 补审一次",
+                }
+            )
             continue
         try:
             age = (date.today() - date.fromisoformat(current.audit_date)).days
         except Exception:
             age = 0
         if age >= 180:
-            alerts.append({
-                "icon": "⚠", "color": "red",
-                "text": f"{ticker} thesis 已 {age} 天未复盘（季度纪律超期）",
-            })
+            alerts.append(
+                {
+                    "icon": "⚠",
+                    "color": "red",
+                    "text": f"{ticker} thesis 已 {age} 天未复盘（季度纪律超期）",
+                }
+            )
         elif age >= 90:
-            alerts.append({
-                "icon": "⏳", "color": "yellow",
-                "text": f"{ticker} thesis {age} 天，快到季度复盘窗口",
-            })
+            alerts.append(
+                {
+                    "icon": "⏳",
+                    "color": "yellow",
+                    "text": f"{ticker} thesis {age} 天，快到季度复盘窗口",
+                }
+            )
         # Check buy/sell zone
         if current.thesis:
             try:
@@ -182,15 +207,21 @@ def _build_briefing(holdings: list[dict], audits: list[dict]) -> dict | None:
             tb = current.thesis.target_buy_price
             ts_ = current.thesis.target_sell_price
             if price and tb and price <= tb:
-                alerts.append({
-                    "icon": "🟢", "color": "green",
-                    "text": f"{ticker} ${price:.0f} 在加仓区（≤ ${tb:.0f}）",
-                })
+                alerts.append(
+                    {
+                        "icon": "🟢",
+                        "color": "green",
+                        "text": f"{ticker} ${price:.0f} 在加仓区（≤ ${tb:.0f}）",
+                    }
+                )
             elif price and ts_ and price >= ts_:
-                alerts.append({
-                    "icon": "🔴", "color": "red",
-                    "text": f"{ticker} ${price:.0f} 在减仓区（≥ ${ts_:.0f}）",
-                })
+                alerts.append(
+                    {
+                        "icon": "🔴",
+                        "color": "red",
+                        "text": f"{ticker} ${price:.0f} 在减仓区（≥ ${ts_:.0f}）",
+                    }
+                )
 
     return {"alerts": alerts, "total_holdings": len(holdings)}
 
@@ -213,19 +244,119 @@ def _daily_quote() -> dict | None:
 TICKER_RE = re.compile(r"^[A-Z][A-Z0-9]{0,5}(\.[A-Z]{1,2})?$")
 
 _TICKER_STOPWORDS = {
-    "AI", "IT", "US", "CN", "HK", "EU", "GDP", "CEO", "CFO", "COO", "ROI", "ROIC",
-    "EPS", "PE", "PEG", "PB", "DCF", "WACC", "FCF", "SBC", "IPO", "ETF", "REIT",
-    "NEW", "BUY", "SELL", "AVOID", "WATCH", "HOLD", "BUYS", "SELLS",
-    "THE", "AND", "FOR", "BUT", "NOT", "YES", "NO", "WHY", "HOW", "WHEN",
-    "WHAT", "WHERE", "WHO", "CAN", "WILL", "ARE", "WAS", "HAS", "HAVE",
-    "THIS", "THAT", "WITH", "FROM", "INTO", "ONTO", "SHOULD", "WOULD", "COULD",
-    "ONE", "TWO", "SIX", "TEN", "AT", "ALL", "ANY", "SOME", "MORE", "LESS",
-    "GOOD", "BAD", "OK", "NOW", "LATER", "EVER", "NEVER", "ALSO", "JUST",
-    "YOU", "YOUR", "MINE", "OURS", "THEM", "THEIR", "WANT", "NEED", "LIKE",
-    "TODAY", "MAYBE", "AGAIN", "THINK", "KNOW", "SEEM", "LOOKS", "WORK",
-    "MUCH", "MANY", "WHICH", "BEING", "DOING", "GOING", "MAKE", "MADE",
-    "LOOK", "SEE", "CHECK", "ASK", "TELL", "GIVE", "TAKE",
-    "SHI", "BU", "HAO",
+    "AI",
+    "IT",
+    "US",
+    "CN",
+    "HK",
+    "EU",
+    "GDP",
+    "CEO",
+    "CFO",
+    "COO",
+    "ROI",
+    "ROIC",
+    "EPS",
+    "PE",
+    "PEG",
+    "PB",
+    "DCF",
+    "WACC",
+    "FCF",
+    "SBC",
+    "IPO",
+    "ETF",
+    "REIT",
+    "NEW",
+    "BUY",
+    "SELL",
+    "AVOID",
+    "WATCH",
+    "HOLD",
+    "BUYS",
+    "SELLS",
+    "THE",
+    "AND",
+    "FOR",
+    "BUT",
+    "NOT",
+    "YES",
+    "NO",
+    "WHY",
+    "HOW",
+    "WHEN",
+    "WHAT",
+    "WHERE",
+    "WHO",
+    "CAN",
+    "WILL",
+    "ARE",
+    "WAS",
+    "HAS",
+    "HAVE",
+    "THIS",
+    "THAT",
+    "WITH",
+    "FROM",
+    "INTO",
+    "ONTO",
+    "SHOULD",
+    "WOULD",
+    "COULD",
+    "ONE",
+    "TWO",
+    "SIX",
+    "TEN",
+    "AT",
+    "ALL",
+    "ANY",
+    "SOME",
+    "MORE",
+    "LESS",
+    "GOOD",
+    "BAD",
+    "OK",
+    "NOW",
+    "LATER",
+    "EVER",
+    "NEVER",
+    "ALSO",
+    "JUST",
+    "YOU",
+    "YOUR",
+    "MINE",
+    "OURS",
+    "THEM",
+    "THEIR",
+    "WANT",
+    "NEED",
+    "LIKE",
+    "TODAY",
+    "MAYBE",
+    "AGAIN",
+    "THINK",
+    "KNOW",
+    "SEEM",
+    "LOOKS",
+    "WORK",
+    "MUCH",
+    "MANY",
+    "WHICH",
+    "BEING",
+    "DOING",
+    "GOING",
+    "MAKE",
+    "MADE",
+    "LOOK",
+    "SEE",
+    "CHECK",
+    "ASK",
+    "TELL",
+    "GIVE",
+    "TAKE",
+    "SHI",
+    "BU",
+    "HAO",
 }
 
 
@@ -257,10 +388,12 @@ async def chat_start(
 
     session = ChatSession.new(ticker)
     session.add(ChatMessage.new("user", input.strip()))
-    session.add(ChatMessage.new(
-        "coach",
-        f"好。在我跑 {ticker} 数据之前，用一两句话告诉我：你为什么觉得它值得被审视？（说'不确定'也行）",
-    ))
+    session.add(
+        ChatMessage.new(
+            "coach",
+            f"好。在我跑 {ticker} 数据之前，用一两句话告诉我：你为什么觉得它值得被审视？（说'不确定'也行）",
+        )
+    )
     save_session(cfg, session)
     return RedirectResponse(f"/chat/{session.session_id}", status_code=302)
 
@@ -273,23 +406,31 @@ async def chat_page(request: Request, session_id: str):
     if not session:
         raise HTTPException(404, "对话不存在或已过期")
     keys = load_keys_from_env()
-    return templates.TemplateResponse(request, "chat/session.html", {
-        "session": session,
-        "session_json": json.dumps(
-            {"session_id": session.session_id, "ticker": session.ticker,
-             "audit_status": session.audit_status,
-             "current_stage": session.current_stage,
-             "anchor_thesis": session.anchor_thesis,
-             "report_date": session.report_date},
-            ensure_ascii=False,
-        ),
-        "keys_missing": keys.has_required()[1],
-    })
+    return templates.TemplateResponse(
+        request,
+        "chat/session.html",
+        {
+            "session": session,
+            "session_json": json.dumps(
+                {
+                    "session_id": session.session_id,
+                    "ticker": session.ticker,
+                    "audit_status": session.audit_status,
+                    "current_stage": session.current_stage,
+                    "anchor_thesis": session.anchor_thesis,
+                    "report_date": session.report_date,
+                },
+                ensure_ascii=False,
+            ),
+            "keys_missing": keys.has_required()[1],
+        },
+    )
 
 
 @app.post("/chat/{session_id}/message")
 async def chat_message(
-    request: Request, session_id: str,
+    request: Request,
+    session_id: str,
     text: Annotated[str, Form()] = "",
     my_market_expectation: Annotated[str, Form()] = "",
     my_variant_view: Annotated[str, Form()] = "",
@@ -324,10 +465,16 @@ async def chat_stream(request: Request, session_id: str):
     if not session:
         raise HTTPException(404)
     if session.audit_status == "complete":
+
         def _replay():
-            yield _sse({"kind": "already_complete",
-                        "report_date": session.report_date,
-                        "ticker": session.ticker})
+            yield _sse(
+                {
+                    "kind": "already_complete",
+                    "report_date": session.report_date,
+                    "ticker": session.ticker,
+                }
+            )
+
         return StreamingResponse(_replay(), media_type="text/event-stream")
 
     keys = load_keys_from_env()
@@ -342,13 +489,13 @@ async def chat_stream(request: Request, session_id: str):
             try:
                 for kind, payload in stream_audit(cfg, keys, session):
                     asyncio.run_coroutine_threadsafe(
-                        queue.put(("event", {"kind": kind, **payload})), loop,
+                        queue.put(("event", {"kind": kind, **payload})),
+                        loop,
                     )
             except Exception as e:
                 log.error("chat_stream producer failed", extra={"err": str(e)})
                 asyncio.run_coroutine_threadsafe(
-                    queue.put(("event", {"kind": "error",
-                                         "message": f"{type(e).__name__}: {e}"})),
+                    queue.put(("event", {"kind": "error", "message": f"{type(e).__name__}: {e}"})),
                     loop,
                 )
             finally:
@@ -356,6 +503,7 @@ async def chat_stream(request: Request, session_id: str):
 
         # Run the sync stream in a thread so we can interleave heartbeats
         import threading
+
         threading.Thread(target=producer, daemon=True).start()
 
         while not done.is_set():
@@ -370,10 +518,14 @@ async def chat_stream(request: Request, session_id: str):
                 break
             yield _sse(data)
 
-    return StreamingResponse(_gen(), media_type="text/event-stream", headers={
-        "Cache-Control": "no-cache",
-        "X-Accel-Buffering": "no",
-    })
+    return StreamingResponse(
+        _gen(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "X-Accel-Buffering": "no",
+        },
+    )
 
 
 def _sse(obj: dict) -> str:
@@ -383,6 +535,7 @@ def _sse(obj: dict) -> str:
 # =====================================================================
 # Ask (Perplexity-style Q&A)
 # =====================================================================
+
 
 @app.post("/ask/start")
 async def ask_start(
@@ -408,15 +561,22 @@ async def ask_page(request: Request, session_id: str):
     session = load_ask_session(cfg, session_id)
     if not session:
         raise HTTPException(404, "问题不存在或已过期")
-    return templates.TemplateResponse(request, "ask/session.html", {
-        "session": session,
-        "session_json": json.dumps({
-            "session_id": session.session_id,
-            "ticker": session.ticker,
-            "query": session.query,
-            "status": session.status,
-        }, ensure_ascii=False),
-    })
+    return templates.TemplateResponse(
+        request,
+        "ask/session.html",
+        {
+            "session": session,
+            "session_json": json.dumps(
+                {
+                    "session_id": session.session_id,
+                    "ticker": session.ticker,
+                    "query": session.query,
+                    "status": session.status,
+                },
+                ensure_ascii=False,
+            ),
+        },
+    )
 
 
 @app.get("/ask/{session_id}/stream")
@@ -427,9 +587,10 @@ async def ask_stream(request: Request, session_id: str):
     if not session:
         raise HTTPException(404)
     if session.status == "complete":
+
         def _replay():
-            yield _sse({"kind": "already_complete",
-                        "ticker": session.ticker})
+            yield _sse({"kind": "already_complete", "ticker": session.ticker})
+
         return StreamingResponse(_replay(), media_type="text/event-stream")
 
     keys = load_keys_from_env()
@@ -443,19 +604,20 @@ async def ask_stream(request: Request, session_id: str):
             try:
                 for kind, payload in ask_engine.stream_ask(cfg, keys, session):
                     asyncio.run_coroutine_threadsafe(
-                        queue.put(("event", {"kind": kind, **payload})), loop,
+                        queue.put(("event", {"kind": kind, **payload})),
+                        loop,
                     )
             except Exception as e:
                 log.error("ask_stream producer failed", extra={"err": str(e)})
                 asyncio.run_coroutine_threadsafe(
-                    queue.put(("event", {"kind": "error",
-                                         "message": f"{type(e).__name__}: {e}"})),
+                    queue.put(("event", {"kind": "error", "message": f"{type(e).__name__}: {e}"})),
                     loop,
                 )
             finally:
                 asyncio.run_coroutine_threadsafe(queue.put(("done", None)), loop)
 
         import threading
+
         threading.Thread(target=producer, daemon=True).start()
 
         while True:
@@ -468,24 +630,40 @@ async def ask_stream(request: Request, session_id: str):
                 break
             yield _sse(data)
 
-    return StreamingResponse(_gen(), media_type="text/event-stream", headers={
-        "Cache-Control": "no-cache",
-        "X-Accel-Buffering": "no",
-    })
+    return StreamingResponse(
+        _gen(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "X-Accel-Buffering": "no",
+        },
+    )
 
 
 # =====================================================================
 # Wisdom library
 # =====================================================================
 
+
 @app.get("/wisdom", response_class=HTMLResponse)
 async def wisdom_index(request: Request):
     grouped = wisdom_mod.group_by_theme(cfg)
     preferred_order = [
-        "competence", "moat", "management", "valuation", "margin_of_safety",
-        "asymmetry", "variant_view", "contrarian", "inversion",
-        "patience", "long_term", "sell_discipline",
-        "emotion", "loss", "humility",
+        "competence",
+        "moat",
+        "management",
+        "valuation",
+        "margin_of_safety",
+        "asymmetry",
+        "variant_view",
+        "contrarian",
+        "inversion",
+        "patience",
+        "long_term",
+        "sell_discipline",
+        "emotion",
+        "loss",
+        "humility",
     ]
     ordered = []
     for t in preferred_order:
@@ -513,11 +691,15 @@ async def wisdom_index(request: Request):
         "misc": "其他",
     }
 
-    return templates.TemplateResponse(request, "wisdom/index.html", {
-        "grouped": ordered,
-        "theme_label": theme_label_cn,
-        "total": sum(len(qs) for _, qs in ordered),
-    })
+    return templates.TemplateResponse(
+        request,
+        "wisdom/index.html",
+        {
+            "grouped": ordered,
+            "theme_label": theme_label_cn,
+            "total": sum(len(qs) for _, qs in ordered),
+        },
+    )
 
 
 @app.get("/wisdom/{quote_id}", response_class=HTMLResponse)
@@ -534,13 +716,18 @@ async def wisdom_detail(request: Request, quote_id: str):
 # Legacy audit form
 # =====================================================================
 
+
 @app.get("/audit/new", response_class=HTMLResponse)
 async def audit_new_get(request: Request):
     keys = load_keys_from_env()
     ok, missing = keys.has_required()
-    return templates.TemplateResponse(request, "audit/new.html", {
-        "missing_keys": missing if not ok else [],
-    })
+    return templates.TemplateResponse(
+        request,
+        "audit/new.html",
+        {
+            "missing_keys": missing if not ok else [],
+        },
+    )
 
 
 @app.post("/audit/new")
@@ -563,7 +750,9 @@ async def audit_new_post(
 
     try:
         report = run_audit_auto(
-            cfg, keys, ticker,
+            cfg,
+            keys,
+            ticker,
             anchor_thesis=anchor_thesis,
             tech_mode=bool(tech_mode),
             my_market_expectation=my_market_expectation,
@@ -581,6 +770,7 @@ async def audit_new_post(
 # Audit view / diff
 # =====================================================================
 
+
 @app.get("/audit/{ticker}/diff", response_class=HTMLResponse)
 async def audit_diff(request: Request, ticker: str):
     ticker = ticker.upper()
@@ -590,12 +780,16 @@ async def audit_diff(request: Request, ticker: str):
     if not previous:
         raise HTTPException(404, "至少需要两次 audit 才能 diff")
     diff_html = render_audit_diff_html(current, previous)
-    return templates.TemplateResponse(request, "audit/diff.html", {
-        "ticker": ticker,
-        "current_date": current.audit_date,
-        "previous_date": previous.audit_date,
-        "diff_html": diff_html,
-    })
+    return templates.TemplateResponse(
+        request,
+        "audit/diff.html",
+        {
+            "ticker": ticker,
+            "current_date": current.audit_date,
+            "previous_date": previous.audit_date,
+            "diff_html": diff_html,
+        },
+    )
 
 
 @app.get("/audit/{ticker}/{date}", response_class=HTMLResponse)
@@ -612,16 +806,23 @@ async def audit_view(request: Request, ticker: str, date: str):
     if current and previous and current.audit_date == date:
         diff_html = render_audit_diff_html(current, previous)
 
-    return templates.TemplateResponse(request, "audit/report.html", {
-        "report": report, "ticker": ticker, "date": date,
-        "diff_html": diff_html,
-        "is_holding": is_holding(cfg, ticker),
-    })
+    return templates.TemplateResponse(
+        request,
+        "audit/report.html",
+        {
+            "report": report,
+            "ticker": ticker,
+            "date": date,
+            "diff_html": diff_html,
+            "is_holding": is_holding(cfg, ticker),
+        },
+    )
 
 
 # =====================================================================
 # History
 # =====================================================================
+
 
 @app.get("/history", response_class=HTMLResponse)
 async def history(request: Request, q: str = "", filter_action: str = ""):
@@ -637,15 +838,22 @@ async def history(request: Request, q: str = "", filter_action: str = ""):
         audits = [a for a in audits if a["action"] == filter_action.upper()]
 
     stale_count = sum(1 for a in audits if a.get("stale_level") in ("stale", "very_stale"))
-    return templates.TemplateResponse(request, "history.html", {
-        "audits": audits, "q": q, "filter_action": filter_action,
-        "stale_count": stale_count,
-    })
+    return templates.TemplateResponse(
+        request,
+        "history.html",
+        {
+            "audits": audits,
+            "q": q,
+            "filter_action": filter_action,
+            "stale_count": stale_count,
+        },
+    )
 
 
 # =====================================================================
 # Portfolio
 # =====================================================================
+
 
 @app.get("/portfolio", response_class=HTMLResponse)
 async def portfolio(request: Request):
@@ -662,10 +870,23 @@ async def portfolio(request: Request):
             price = None
 
         row = {
-            "ticker": ticker, "size": h.get("size", ""),
-            "note": h.get("note", ""), "price": price,
-            "audit_date": None, "age_days": None, "stale_level": None,
-            "target_buy": None, "target_sell": None, "mos_pct": None, "status": None,
+            "ticker": ticker,
+            "size": h.get("size", ""),
+            "note": h.get("note", ""),
+            "price": price,
+            "audit_date": None,
+            "age_days": None,
+            "stale_level": None,
+            "target_buy": None,
+            "target_sell": None,
+            "mos_pct": None,
+            "status": None,
+            # v0.6: review-needed signal — prompts user to re-audit when
+            # price has moved materially since last audit.
+            "audit_price": None,
+            "price_change_pct": None,
+            "review_needed": False,
+            "review_reason": None,
         }
 
         if current:
@@ -674,11 +895,10 @@ async def portfolio(request: Request):
                 age = (today - date.fromisoformat(current.audit_date)).days
                 row["age_days"] = age
                 row["stale_level"] = (
-                    "very_stale" if age >= 180 else
-                    "stale" if age >= 90 else "fresh"
+                    "very_stale" if age >= 180 else "stale" if age >= 90 else "fresh"
                 )
             except Exception:
-                pass
+                age = None
             if current.thesis:
                 row["target_buy"] = current.thesis.target_buy_price
                 row["target_sell"] = current.thesis.target_sell_price
@@ -687,6 +907,22 @@ async def portfolio(request: Request):
                 mos = s7.raw_data.get("margin_of_safety_pct")
                 if mos is not None:
                     row["mos_pct"] = mos
+                audit_price = s7.raw_data.get("current_price")
+                if audit_price:
+                    row["audit_price"] = audit_price
+                    if price and audit_price > 0:
+                        chg = (price - audit_price) / audit_price * 100
+                        row["price_change_pct"] = chg
+                        # Review-needed heuristic: audit >= 30 days old AND
+                        # price moved >= 15%. Not "stop-loss" — just a prompt
+                        # to re-verify the thesis with fresh numbers.
+                        if row.get("age_days") and row["age_days"] >= 30 and abs(chg) >= 15:
+                            row["review_needed"] = True
+                            direction = "涨" if chg > 0 else "跌"
+                            row["review_reason"] = (
+                                f"自 audit 已 {direction} {abs(chg):.0f}% "
+                                f"(已过 {row['age_days']} 天)"
+                            )
             if price and row["target_buy"] and row["target_sell"]:
                 if price <= row["target_buy"]:
                     row["status"] = "buy_zone"
@@ -702,6 +938,7 @@ async def portfolio(request: Request):
 # =====================================================================
 # Learn
 # =====================================================================
+
 
 @app.get("/learn", response_class=HTMLResponse)
 async def learn_index(request: Request):
@@ -724,20 +961,32 @@ async def learn_concept(request: Request, slug: str):
     raw_md = path.read_text(encoding="utf-8")
     try:
         import markdown as md_lib
+
         content_html = md_lib.markdown(raw_md, extensions=["extra", "tables"])
     except ImportError:
         from html import escape
+
         content_html = f'<pre class="whitespace-pre-wrap">{escape(raw_md)}</pre>'
-    return templates.TemplateResponse(request, "learn/concept.html", {
-        "content": content_html, "slug": slug,
-    })
+    return templates.TemplateResponse(
+        request,
+        "learn/concept.html",
+        {
+            "content": content_html,
+            "slug": slug,
+        },
+    )
 
 
 # =====================================================================
 # API
 # =====================================================================
 
+
 @app.get("/api/status", response_class=JSONResponse)
 async def api_status():
-    return {"status": "ok", "version": "0.5.0", "mode": "single-user",
-            "timestamp": datetime.now().isoformat()}
+    return {
+        "status": "ok",
+        "version": "0.5.0",
+        "mode": "single-user",
+        "timestamp": datetime.now().isoformat(),
+    }

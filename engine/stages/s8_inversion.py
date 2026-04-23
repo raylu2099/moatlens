@@ -10,18 +10,20 @@ Two parts:
 
 Uses Claude (sonnet-4-5) for deep reasoning.
 """
+
 from __future__ import annotations
 
 import json
 import time
 
-from engine.models import StageResult, Verdict
+from engine.models import StageResult
 from engine.prompts_loader import load_prompt
 from engine.providers import claude as p_claude
+from engine.providers import yfinance_provider as yfp
 from shared.config import ApiKeys, Config
 
+from ._enrichments import fda_pipeline_summary, sec_risk_factors_excerpt
 from ._helpers import aggregate_verdict, make_metric
-
 
 STAGE_ID = 8
 STAGE_NAME = "反方论点 & Variant View"
@@ -75,7 +77,9 @@ _LEGACY_SYSTEM_PROMPT = """你是一位遵循 Charlie Munger "Invert, always inv
 
 
 def run(
-    cfg: Config, keys: ApiKeys, ticker: str,
+    cfg: Config,
+    keys: ApiKeys,
+    ticker: str,
     anchor_thesis: str,
     prior_stages_summary: dict,
     my_variant_view: str = "",
@@ -88,10 +92,42 @@ def run(
         system_prompt, prompt_version = _LEGACY_SYSTEM_PROMPT, "inline-fallback"
 
     variant_block = (
-        f"\n\n# 用户的非共识观点 (my variant view)\n{my_variant_view}\n"
-        "在 variant_view.my_difference 中必须**明确引用或评估**用户这段话，并在"
-        "if_i_right 中说明若用户这个差异是正确的，未来 3 年价格会怎么演化。"
-    ) if my_variant_view else ""
+        (
+            f"\n\n# 用户的非共识观点 (my variant view)\n{my_variant_view}\n"
+            "在 variant_view.my_difference 中必须**明确引用或评估**用户这段话，并在"
+            "if_i_right 中说明若用户这个差异是正确的，未来 3 年价格会怎么演化。"
+        )
+        if my_variant_view
+        else ""
+    )
+
+    # --- v0.6 enrichment: pull SEC Risk Factors + FDA pipeline for inversion context ---
+    enrichment_block = ""
+    enrichment_raw: dict = {}
+    rf_text = sec_risk_factors_excerpt(cfg, keys, ticker, max_chars=1500)
+    if rf_text:
+        enrichment_block += f"\n\n# 最近 10-K Risk Factors 摘录（供识别失败模式）\n{rf_text}\n"
+        enrichment_raw["sec_risk_factors_chars"] = len(rf_text)
+    try:
+        company_info = yfp.fetch_company_info(ticker)
+        _, fda_raw = fda_pipeline_summary(
+            cfg,
+            keys,
+            company_info.get("long_name", ticker),
+            company_info.get("sector", ""),
+        )
+    except Exception:
+        fda_raw = None
+    if fda_raw:
+        enrichment_block += (
+            f"\n\n# FDA / ClinicalTrials 管线数据（医药股专用）\n"
+            f"强度: {fda_raw.get('pipeline_strength', '?')}; "
+            f"活跃 Phase 3: {fda_raw.get('active_phase_3', 0)}; "
+            f"Phase 2: {fda_raw.get('active_phase_2', 0)}; "
+            f"近 5 年批准: {fda_raw.get('approvals_last_5y', 0)}\n"
+            f"**在 failure_modes 中必须考虑 '核心药品专利悬崖 / pipeline 枯竭' 场景。**\n"
+        )
+        enrichment_raw["fda_pipeline"] = fda_raw
 
     user_prompt = f"""# 审视对象
 Ticker: {ticker}
@@ -112,14 +148,19 @@ Ticker: {ticker}
 
 ## Stage 7 安全边际（摘要）
 {json.dumps(prior_stages_summary.get('stage7', {}), ensure_ascii=False, indent=2)[:1500]}
-
+{enrichment_block}
 请严格按系统提示词的 JSON 格式输出。"""
 
     claude_output, cost = p_claude.analyze(
-        cfg, keys, system_prompt, user_prompt, max_tokens=3500,
+        cfg,
+        keys,
+        system_prompt,
+        user_prompt,
+        max_tokens=3500,
     )
 
     from engine.guardrails import validate_inversion
+
     parsed, parse_errors = validate_inversion(claude_output)
     if parse_errors:
         parsed["parse_errors"] = parse_errors
@@ -130,28 +171,41 @@ Ticker: {ticker}
     findings = []
 
     failure_modes = parsed.get("failure_modes", [])
-    metrics.append(make_metric(
-        "失败模式数量", len(failure_modes),
-        "≥ 3", len(failure_modes) >= 3,
-        note="越多越好 — 证明你真正想过'怎么会错'",
-    ))
+    metrics.append(
+        make_metric(
+            "失败模式数量",
+            len(failure_modes),
+            "≥ 3",
+            len(failure_modes) >= 3,
+            note="越多越好 — 证明你真正想过'怎么会错'",
+        )
+    )
 
     # Total failure probability
     total_failure_prob = sum(f.get("probability_pct", 0) for f in failure_modes)
-    metrics.append(make_metric(
-        "总失败概率", total_failure_prob,
-        "≤ 50% (否则不该买)", total_failure_prob <= 50, unit="%",
-        note="若 >50% 失败概率，该投资期望值可能为负",
-    ))
+    metrics.append(
+        make_metric(
+            "总失败概率",
+            total_failure_prob,
+            "≤ 50% (否则不该买)",
+            total_failure_prob <= 50,
+            unit="%",
+            note="若 >50% 失败概率，该投资期望值可能为负",
+        )
+    )
 
     variant = parsed.get("variant_view", {})
     my_correctness = variant.get("my_correctness_probability_pct", 0)
-    metrics.append(make_metric(
-        "我正确的概率 (自估)", my_correctness,
-        "30-70% (过于自信是红旗)",
-        30 <= my_correctness <= 70, unit="%",
-        note="> 70% 是过度自信；< 30% 则不该下注",
-    ))
+    metrics.append(
+        make_metric(
+            "我正确的概率 (自估)",
+            my_correctness,
+            "30-70% (过于自信是红旗)",
+            30 <= my_correctness <= 70,
+            unit="%",
+            note="> 70% 是过度自信；< 30% 则不该下注",
+        )
+    )
 
     # Findings
     findings.append("## 🔄 失败模式 (Munger Inversion)")
@@ -168,7 +222,9 @@ Ticker: {ticker}
     findings.append("")
     findings.append("## 🎯 Variant View Canvas")
     if variant:
-        findings.append(f"- 可能结果区间: {variant.get('range_worst', '?')} / {variant.get('range_base', '?')} / {variant.get('range_best', '?')}")
+        findings.append(
+            f"- 可能结果区间: {variant.get('range_worst', '?')} / {variant.get('range_base', '?')} / {variant.get('range_best', '?')}"
+        )
         findings.append(f"- 最可能: {variant.get('most_likely_outcome', '?')}")
         findings.append(f"- 市场共识: {variant.get('market_consensus', '?')}")
         findings.append(f"- 我的差异: {variant.get('my_difference', '?')}")
@@ -197,6 +253,7 @@ Ticker: {ticker}
             "cost_usd": cost,
             "prompt_slug": PROMPT_SLUG,
             "prompt_version": prompt_version,
+            **({"enrichments": enrichment_raw} if enrichment_raw else {}),
         },
         elapsed_seconds=time.time() - t0,
     )

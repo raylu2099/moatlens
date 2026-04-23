@@ -12,10 +12,15 @@ Bucket policy (per call, per process — not across restarts):
 - perplexity:       20/min, burst 10
 - financial_datasets: 60/min, burst 20
 - fred:             30/min, burst 15
+- sec_api_io:       30/min, burst 10
+- finnhub:          60/min, burst 20     (free tier: 60/min)
+- marketaux:        10/min, burst 5      (free tier: 100/day → conservative)
+- fda:              30/min, burst 15     (openFDA + ClinicalTrials.gov, no key)
 
 These are *very* loose for a single user — they exist solely to catch bugs
 (accidental while True), not to enforce provider quotas.
 """
+
 from __future__ import annotations
 
 import threading
@@ -47,10 +52,14 @@ class TokenBucket:
 
 
 _BUCKETS: dict[str, TokenBucket] = {
-    "claude":             TokenBucket(20, 10),
-    "perplexity":         TokenBucket(20, 10),
+    "claude": TokenBucket(20, 10),
+    "perplexity": TokenBucket(20, 10),
     "financial_datasets": TokenBucket(60, 20),
-    "fred":               TokenBucket(30, 15),
+    "fred": TokenBucket(30, 15),
+    "sec_api_io": TokenBucket(30, 10),
+    "finnhub": TokenBucket(60, 20),
+    "marketaux": TokenBucket(10, 5),
+    "fda": TokenBucket(30, 15),
 }
 
 
@@ -60,9 +69,7 @@ def require_token(provider: str) -> None:
     if bucket is None:
         return  # unknown provider, no limit
     if not bucket.take(1):
-        raise RateLimitExceeded(
-            f"{provider}: rate limit exceeded. Sanity-check for runaway loops."
-        )
+        raise RateLimitExceeded(f"{provider}: rate limit exceeded. Sanity-check for runaway loops.")
 
 
 def reset_all() -> None:

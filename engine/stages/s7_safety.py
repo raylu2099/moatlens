@@ -13,6 +13,7 @@ Compute:
 - Asymmetry: upside vs downside
 - Howard Marks "correct × non-consensus" framing
 """
+
 from __future__ import annotations
 
 import time
@@ -20,8 +21,8 @@ import time
 from engine.models import StageResult, Verdict
 from shared.config import ApiKeys, Config
 
+from ._enrichments import finnhub_consensus_summary, marketaux_sentiment_summary
 from ._helpers import aggregate_verdict, make_metric
-
 
 STAGE_ID = 7
 STAGE_NAME = "安全边际 & 非对称性"
@@ -37,7 +38,9 @@ def _kelly_fraction(win_prob: float, win_loss_ratio: float) -> float:
 
 
 def run(
-    cfg: Config, keys: ApiKeys, ticker: str,
+    cfg: Config,
+    keys: ApiKeys,
+    ticker: str,
     stage6_raw: dict,
 ) -> StageResult:
     t0 = time.time()
@@ -51,7 +54,9 @@ def run(
 
     if not scenarios or not current_price:
         return StageResult(
-            stage_id=STAGE_ID, stage_name=STAGE_NAME, verdict=Verdict.SKIP,
+            stage_id=STAGE_ID,
+            stage_name=STAGE_NAME,
+            verdict=Verdict.SKIP,
             findings=["No valuation data from Stage 6"],
             elapsed_seconds=time.time() - t0,
         )
@@ -67,7 +72,9 @@ def run(
 
     if base_iv <= 0:
         return StageResult(
-            stage_id=STAGE_ID, stage_name=STAGE_NAME, verdict=Verdict.SKIP,
+            stage_id=STAGE_ID,
+            stage_name=STAGE_NAME,
+            verdict=Verdict.SKIP,
             findings=["Base intrinsic value not positive"],
             elapsed_seconds=time.time() - t0,
         )
@@ -86,11 +93,16 @@ def run(
 
     # --- Margin of safety (current) ---
     mos_pct = (base_iv - current_price) / base_iv * 100
-    metrics.append(make_metric(
-        "当前安全边际", round(mos_pct, 1),
-        "≥ 30%", mos_pct >= 30, unit="%",
-        note="< 0 = 溢价交易；0-30% = 公允；≥ 30% = 有 buffer",
-    ))
+    metrics.append(
+        make_metric(
+            "当前安全边际",
+            round(mos_pct, 1),
+            "≥ 30%",
+            mos_pct >= 30,
+            unit="%",
+            note="< 0 = 溢价交易；0-30% = 公允；≥ 30% = 有 buffer",
+        )
+    )
 
     # --- Asymmetry: upside / downside ---
     upside = (bull_iv - current_price) / current_price * 100 if bull_iv > 0 else 0
@@ -98,15 +110,20 @@ def run(
     asymmetry = upside / downside if downside > 0 else float("inf")
 
     findings.append("")
-    findings.append(f"**非对称性分析**:")
+    findings.append("**非对称性分析**:")
     findings.append(f"  Bull 上行空间: {upside:+.1f}%")
     findings.append(f"  Bear 下行空间: {downside:+.1f}%")
     findings.append(f"  非对称比例: {asymmetry:.1f}x (>1 = 好赔率)")
 
-    metrics.append(make_metric(
-        "非对称比例 (Upside/Downside)", round(asymmetry, 1) if asymmetry != float('inf') else "∞",
-        "≥ 2x", asymmetry >= 2, unit="x",
-    ))
+    metrics.append(
+        make_metric(
+            "非对称比例 (Upside/Downside)",
+            round(asymmetry, 1) if asymmetry != float("inf") else "∞",
+            "≥ 2x",
+            asymmetry >= 2,
+            unit="x",
+        )
+    )
 
     # --- Kelly fraction (rough estimate) ---
     # Assume 60% confidence in base case if MOS > 20%
@@ -117,7 +134,7 @@ def run(
         kelly = _kelly_fraction(win_prob, win_loss)
         kelly_pct = kelly * 100
         findings.append("")
-        findings.append(f"**Kelly 仓位建议** (half-Kelly, 保守):")
+        findings.append("**Kelly 仓位建议** (half-Kelly, 保守):")
         findings.append(f"  假设胜率 {win_prob*100:.0f}% + 赔率 {win_loss:.1f}")
         findings.append(f"  → 建议仓位 **{kelly_pct:.1f}%** of portfolio")
         if kelly_pct < 2:
@@ -128,10 +145,7 @@ def run(
     # --- Howard Marks lens ---
     findings.append("")
     findings.append("**Howard Marks 检查**: ")
-    findings.append(
-        "  超额收益 = **正确** × **非共识**。"
-        f"基准 IV ${base_iv:.2f} 是你的判断。"
-    )
+    findings.append("  超额收益 = **正确** × **非共识**。" f"基准 IV ${base_iv:.2f} 是你的判断。")
     if mos_pct >= 30:
         findings.append(
             f"  当前价 ${current_price:.2f} (折让 {mos_pct:.0f}%) 暗示市场更悲观。"
@@ -144,8 +158,25 @@ def run(
         )
     else:
         findings.append(
-            f"  市场与你判断基本一致。没有 alpha 可言 — "
-            "要么等更好价格，要么找真正非共识的机会。"
+            "  市场与你判断基本一致。没有 alpha 可言 — " "要么等更好价格，要么找真正非共识的机会。"
+        )
+
+    # --- v0.6 enrichment: consensus vs your IV (Howard Marks framing) ---
+    enrichment_raw = {}
+    fh_line, fh_raw = finnhub_consensus_summary(cfg, keys, ticker)
+    mx_line, mx_raw = marketaux_sentiment_summary(cfg, keys, ticker, days=30)
+    if fh_line or mx_line:
+        findings.append("")
+        findings.append("### 🔍 市场共识 vs 你的判断")
+        if fh_line:
+            findings.append(fh_line)
+            enrichment_raw["finnhub_consensus"] = fh_raw
+        if mx_line:
+            findings.append(mx_line)
+            enrichment_raw["marketaux"] = mx_raw
+        findings.append(
+            "**Howard Marks 提醒**: 共识 ≠ 真相。若你与共识一致，没有 alpha；"
+            "若相反，你必须能说清他们为什么错。"
         )
 
     verdict = aggregate_verdict(metrics)
@@ -166,7 +197,8 @@ def run(
             "upside_pct": upside,
             "downside_pct": downside,
             "asymmetry_ratio": asymmetry if asymmetry != float("inf") else 99,
-            "kelly_fraction_pct": kelly_pct if 'kelly_pct' in locals() else None,
+            "kelly_fraction_pct": kelly_pct if "kelly_pct" in locals() else None,
+            **({"enrichments": enrichment_raw} if enrichment_raw else {}),
         },
         elapsed_seconds=time.time() - t0,
     )

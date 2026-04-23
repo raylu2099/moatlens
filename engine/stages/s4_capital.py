@@ -15,11 +15,10 @@ Rules:
 
 LLM component: analyze recent shareholder letter for tone and candor.
 """
+
 from __future__ import annotations
 
-import json
 import time
-from datetime import datetime
 
 from engine.models import StageResult, Verdict
 from engine.prompts_loader import load_prompt
@@ -29,8 +28,8 @@ from engine.providers import perplexity as p_pplx
 from engine.providers import yfinance_provider as yfp
 from shared.config import ApiKeys, Config
 
+from ._enrichments import finnhub_consensus_summary, finnhub_insider_summary
 from ._helpers import aggregate_verdict, make_metric
-
 
 STAGE_ID = 4
 STAGE_NAME = "管理层 & 资本配置"
@@ -43,14 +42,20 @@ def _buffett_dollar_test(income_periods: list[dict], current_market_cap: float) 
         return {}
 
     total_ni = sum(p.get("net_income") or 0 for p in income_periods)
-    dividends = sum(abs(p.get("dividends_per_common_share") or 0) * (p.get("weighted_average_shares_diluted") or 0) for p in income_periods)
+    dividends = sum(
+        abs(p.get("dividends_per_common_share") or 0)
+        * (p.get("weighted_average_shares_diluted") or 0)
+        for p in income_periods
+    )
     retained = total_ni - dividends
 
     # Rough proxy: current market cap minus market cap N years ago
     # (We don't have historical mcap — use retained earnings test as proxy)
     # For proper test, would need mcap history; approximate with current only
     if retained > 0:
-        ratio = current_market_cap / retained  # rough — interpretation: "每留存 1 美元创造 X 美元市值"
+        ratio = (
+            current_market_cap / retained
+        )  # rough — interpretation: "每留存 1 美元创造 X 美元市值"
         return {
             "cumulative_retained_earnings": retained,
             "current_market_cap": current_market_cap,
@@ -87,7 +92,9 @@ _LEGACY_SYSTEM_PROMPT = """你是一位分析上市公司管理层与资本配�
 
 
 def run(
-    cfg: Config, keys: ApiKeys, ticker: str,
+    cfg: Config,
+    keys: ApiKeys,
+    ticker: str,
     stage1_raw: dict,
 ) -> StageResult:
     t0 = time.time()
@@ -97,7 +104,9 @@ def run(
         insider = fd.fetch_insider_trades(cfg, keys, ticker, limit=20)
     except fd.FinancialDatasetsError as e:
         return StageResult(
-            stage_id=STAGE_ID, stage_name=STAGE_NAME, verdict=Verdict.SKIP,
+            stage_id=STAGE_ID,
+            stage_name=STAGE_NAME,
+            verdict=Verdict.SKIP,
             findings=[f"Data unavailable: {e}"],
             elapsed_seconds=time.time() - t0,
         )
@@ -121,21 +130,31 @@ def run(
         if old_shares > 0:
             share_change_pct = (recent_shares - old_shares) / old_shares * 100
             pass_share = share_change_pct <= 0  # ideally decreasing
-            metrics.append(make_metric(
-                "股份变化 (5Y)", round(share_change_pct, 1),
-                "≤ 0% (应减少)", pass_share, unit="%",
-                note="回购 = 负值更好；稀释 = 正值差",
-            ))
+            metrics.append(
+                make_metric(
+                    "股份变化 (5Y)",
+                    round(share_change_pct, 1),
+                    "≤ 0% (应减少)",
+                    pass_share,
+                    unit="%",
+                    note="回购 = 负值更好；稀释 = 正值差",
+                )
+            )
 
     # --- Buffett $1 test ---
     buffett = _buffett_dollar_test(income.periods, multiples.market_cap or 0)
     if buffett.get("ratio_proxy"):
         r = buffett["ratio_proxy"]
-        metrics.append(make_metric(
-            "Buffett $1 Test (proxy)", round(r, 2),
-            "> 1.0", r > 1.0, unit="x",
-            note=buffett.get("interpretation", ""),
-        ))
+        metrics.append(
+            make_metric(
+                "Buffett $1 Test (proxy)",
+                round(r, 2),
+                "> 1.0",
+                r > 1.0,
+                unit="x",
+                note=buffett.get("interpretation", ""),
+            )
+        )
 
     # --- Insider trading signal ---
     net_shares = 0.0
@@ -151,13 +170,15 @@ def run(
             net_shares -= shares
             sell_count += 1
     if insider:
-        metrics.append(make_metric(
-            "内部人交易 (近 20 笔)",
-            f"{buy_count}买/{sell_count}卖",
-            "净买入 > 净卖出",
-            net_shares > 0,
-            note=f"净 {net_shares:+,.0f} 股",
-        ))
+        metrics.append(
+            make_metric(
+                "内部人交易 (近 20 笔)",
+                f"{buy_count}买/{sell_count}卖",
+                "净买入 > 净卖出",
+                net_shares > 0,
+                note=f"净 {net_shares:+,.0f} 股",
+            )
+        )
 
     # --- Perplexity research on recent shareholder letter + management commentary ---
     research_prompt = (
@@ -169,8 +190,12 @@ def run(
         f"past 12 months."
     )
     research_text, sources, pplx_cost = p_pplx.research(
-        cfg, keys, research_prompt,
-        model=cfg.pplx_model_analysis, max_tokens=800, recency="year",
+        cfg,
+        keys,
+        research_prompt,
+        model=cfg.pplx_model_analysis,
+        max_tokens=800,
+        recency="year",
     )
 
     # --- Claude analyze ---
@@ -188,10 +213,15 @@ def run(
 请严格按系统提示词的 JSON 格式输出。"""
 
     claude_output, claude_cost = p_claude.analyze(
-        cfg, keys, system_prompt, user_prompt, max_tokens=2000,
+        cfg,
+        keys,
+        system_prompt,
+        user_prompt,
+        max_tokens=2000,
     )
 
     from engine.guardrails import validate_management
+
     parsed, parse_errors = validate_management(claude_output)
     if parse_errors:
         parsed["parse_errors"] = parse_errors
@@ -201,14 +231,26 @@ def run(
     # Metrics from Claude
     integ = parsed.get("integrity_score")
     if integ is not None:
-        metrics.append(make_metric(
-            "诚信度 (Claude)", integ, "≥ 14", integ >= 14, unit="/20",
-        ))
+        metrics.append(
+            make_metric(
+                "诚信度 (Claude)",
+                integ,
+                "≥ 14",
+                integ >= 14,
+                unit="/20",
+            )
+        )
     cap = parsed.get("capital_allocation_score")
     if cap is not None:
-        metrics.append(make_metric(
-            "资本分配能力 (Claude)", cap, "≥ 14", cap >= 14, unit="/20",
-        ))
+        metrics.append(
+            make_metric(
+                "资本分配能力 (Claude)",
+                cap,
+                "≥ 14",
+                cap >= 14,
+                unit="/20",
+            )
+        )
 
     if parsed.get("buffett_verdict_cn"):
         findings.append(f"**Buffett 判断**: {parsed['buffett_verdict_cn']}")
@@ -216,6 +258,20 @@ def run(
         findings.append("**红旗**: " + "; ".join(parsed["red_flags"]))
     if parsed.get("summary_cn"):
         findings.append(f"\n{parsed['summary_cn']}")
+
+    # --- v0.6 enrichments ---
+    enrichment_raw = {}
+    fh_insider_line, fh_insider_raw = finnhub_insider_summary(cfg, keys, ticker)
+    if fh_insider_line:
+        findings.append("")
+        findings.append(fh_insider_line)
+    if fh_insider_raw:
+        enrichment_raw["finnhub_insider"] = fh_insider_raw
+    fh_consensus_line, fh_consensus_raw = finnhub_consensus_summary(cfg, keys, ticker)
+    if fh_consensus_line:
+        findings.append(fh_consensus_line)
+    if fh_consensus_raw:
+        enrichment_raw["finnhub_consensus"] = fh_consensus_raw
 
     verdict = aggregate_verdict(metrics)
 
@@ -233,6 +289,7 @@ def run(
             "cost_usd": claude_cost + pplx_cost,
             "prompt_slug": PROMPT_SLUG,
             "prompt_version": prompt_version,
+            **({"enrichments": enrichment_raw} if enrichment_raw else {}),
         },
         elapsed_seconds=time.time() - t0,
     )

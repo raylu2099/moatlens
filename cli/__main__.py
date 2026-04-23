@@ -20,6 +20,7 @@ Holdings tracking:
     python -m cli hold list
     python -m cli hold check
 """
+
 from __future__ import annotations
 
 import sys
@@ -28,11 +29,23 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
+# Double-safety .env load (shared/config.py also loads on import, but this
+# fires before any engine module is imported — guards against cases where
+# cwd confusion or import-order quirks prevented the first load from taking
+# effect. Cheap insurance; no-op if .env already loaded.)
+try:
+    from dotenv import load_dotenv as _load_dotenv  # noqa: E402
+
+    _PROJECT_ROOT = Path(__file__).resolve().parent.parent
+    _load_dotenv(_PROJECT_ROOT / ".env", override=False)
+except Exception:  # pragma: no cover — dotenv missing is surfaced by config.py
+    pass
+
 import typer
 from rich import print as rprint
 from rich.console import Console
 from rich.panel import Panel
-from rich.prompt import Prompt, Confirm
+from rich.prompt import Confirm, Prompt
 from rich.table import Table
 
 from engine.models import Verdict
@@ -40,9 +53,12 @@ from engine.orchestrator import run_audit_auto, run_audit_wizard
 from engine.report_renderer import render_markdown
 from shared.config import load_config, load_keys_from_env
 from shared.storage import (
-    audits_dir, list_audits, load_audit, load_last_two_audits, save_audit,
+    audits_dir,
+    list_audits,
+    load_audit,
+    load_last_two_audits,
+    save_audit,
 )
-
 
 app = typer.Typer(help="Moatlens — 价值投资审视工具（Buffett/Munger lens）")
 hold_app = typer.Typer(help="持仓跟踪 —— 标记 ticker 为持仓/观察，批量复盘")
@@ -107,7 +123,9 @@ def audit(
     auto: bool = typer.Option(False, "--auto", "-a", help="一次跑完，不在每 stage 之间暂停"),
     tech: bool = typer.Option(False, "--tech", help="科技股模式 (考虑 SBC 稀释, 更高 PE 容忍)"),
     thesis: str = typer.Option("", "--thesis", "-t", help="你的初始 1-2 句论点"),
-    no_claude: bool = typer.Option(False, "--no-claude", help="跳过 stage 3/4/8 的 Claude 调用（免费 dry-run）"),
+    no_claude: bool = typer.Option(
+        False, "--no-claude", help="跳过 stage 3/4/8 的 Claude 调用（免费 dry-run）"
+    ),
     only: str = typer.Option("", "--only", help="只跑指定 stage，例如 '6' 或 '5,6,7'"),
     from_stage: int = typer.Option(0, "--from", help="从指定 stage 开始跑 (1-8)"),
     resume: bool = typer.Option(False, "--resume", help="基于该 ticker 今天的最新 audit 增量续跑"),
@@ -157,23 +175,28 @@ def audit(
         today = datetime.now().strftime("%Y-%m-%d")
         resume_report = load_audit(cfg, ticker, today)
         if resume_report:
-            console.print(f"[yellow]➤ 续跑今天的 {ticker.upper()} audit（已有 {len(resume_report.stages)} 个 stage 结果）[/]")
+            console.print(
+                f"[yellow]➤ 续跑今天的 {ticker.upper()} audit（已有 {len(resume_report.stages)} 个 stage 结果）[/]"
+            )
         else:
             rprint(f"[dim]没有找到 {ticker.upper()} {today} 的 partial audit，从头开始[/]")
 
-    console.print(Panel(
-        f"[bold cyan]Moatlens 审视[/] · [bold]{ticker.upper()}[/]\n"
-        f"模式: {'Auto' if auto else 'Wizard (交互)'}"
-        + (f" · Tech" if tech else "")
-        + (f" · --no-claude" if no_claude else "")
-        + (f" · --only {only_stages}" if only_stages else "")
-        + (f" · --from {from_s}" if from_s else "")
-        + (f"\nAnchor: {thesis}" if thesis else ""),
-        border_style="cyan",
-    ))
+    console.print(
+        Panel(
+            f"[bold cyan]Moatlens 审视[/] · [bold]{ticker.upper()}[/]\n"
+            f"模式: {'Auto' if auto else 'Wizard (交互)'}"
+            + (" · Tech" if tech else "")
+            + (" · --no-claude" if no_claude else "")
+            + (f" · --only {only_stages}" if only_stages else "")
+            + (f" · --from {from_s}" if from_s else "")
+            + (f"\nAnchor: {thesis}" if thesis else ""),
+            border_style="cyan",
+        )
+    )
 
     common_kwargs = dict(
-        anchor_thesis=thesis, tech_mode=tech,
+        anchor_thesis=thesis,
+        tech_mode=tech,
         resume_from=resume_report,
         skip_claude=no_claude,
         only_stages=only_stages,
@@ -183,8 +206,10 @@ def audit(
     )
 
     if auto or only_stages or from_s:
+
         def cb(num, result):
             _print_stage(num, result)
+
         report = run_audit_auto(cfg, keys, ticker, progress_callback=cb, **common_kwargs)
     else:
         gen = run_audit_wizard(cfg, keys, ticker, **common_kwargs)
@@ -212,12 +237,14 @@ def audit(
     action = report.overall_action.value if report.overall_action else "PENDING"
     conf = report.overall_confidence.value if report.overall_confidence else "?"
     pass_ct = sum(1 for s in report.stages if s.verdict == Verdict.PASS)
-    console.print(Panel(
-        f"[bold]{ticker.upper()}[/] · {action} · 置信度 {conf}\n"
-        f"通过: {pass_ct}/{len(report.stages)}\n"
-        f"API 总成本: ${report.total_api_cost_usd:.3f}",
-        border_style="magenta",
-    ))
+    console.print(
+        Panel(
+            f"[bold]{ticker.upper()}[/] · {action} · 置信度 {conf}\n"
+            f"通过: {pass_ct}/{len(report.stages)}\n"
+            f"API 总成本: ${report.total_api_cost_usd:.3f}",
+            border_style="magenta",
+        )
+    )
 
     md = render_markdown(report)
     md_path, json_path = save_audit(cfg, report, md)
@@ -252,8 +279,9 @@ def list_cmd():
                 age_str = f"[yellow]{age}d[/]"
             else:
                 age_str = f"[dim]{age}d[/]"
-        t.add_row(a["ticker"], a["audit_date"], age_str,
-                  a["action"] or "—", f"${a['total_cost_usd']:.3f}")
+        t.add_row(
+            a["ticker"], a["audit_date"], age_str, a["action"] or "—", f"${a['total_cost_usd']:.3f}"
+        )
     console.print(t)
 
 
@@ -272,6 +300,7 @@ def show(ticker: str, date: str):
 def diff(ticker: str):
     """比较某 ticker 最近两次 audit —— thesis 演变了吗？"""
     from web.diff import render_audit_diff_text
+
     cfg = load_config()
     current, previous = load_last_two_audits(cfg, ticker)
     if not current:
@@ -287,12 +316,14 @@ def diff(ticker: str):
 def doctor():
     """体检 API key 与依赖。"""
     import subprocess
+
     subprocess.run([sys.executable, str(Path(__file__).parent.parent / "bin" / "doctor.py")])
 
 
 # =====================================================================
 # Holdings sub-app
 # =====================================================================
+
 
 @hold_app.command("add")
 def hold_add(
@@ -301,7 +332,8 @@ def hold_add(
     note: str = typer.Option("", "--note", help="备注（为何买、入场价格等）"),
 ):
     """标记 ticker 为持仓。"""
-    from shared.holdings import add_holding, load_holdings
+    from shared.holdings import add_holding
+
     cfg = load_config()
     add_holding(cfg, ticker, size=size, note=note)
     rprint(f"[green]✓[/] 已加入持仓: {ticker.upper()}" + (f"  仓位={size}" if size else ""))
@@ -312,6 +344,7 @@ def hold_add(
 def hold_remove(ticker: str):
     """移除持仓标记。"""
     from shared.holdings import remove_holding
+
     cfg = load_config()
     if remove_holding(cfg, ticker):
         rprint(f"[yellow]-[/] 已移除: {ticker.upper()}")
@@ -323,6 +356,7 @@ def hold_remove(ticker: str):
 def hold_list():
     """列出当前持仓。"""
     from shared.holdings import load_holdings
+
     cfg = load_config()
     hs = load_holdings(cfg)
     if not hs:
@@ -341,8 +375,9 @@ def hold_list():
 @hold_app.command("check")
 def hold_check():
     """对所有持仓做一次简短对账：当前价 vs target_buy / target_sell 从最近一次 audit 里读。"""
-    from shared.holdings import load_holdings
     from engine.providers import yfinance_provider as yfp
+    from shared.holdings import load_holdings
+
     cfg = load_config()
     hs = load_holdings(cfg)
     if not hs:
@@ -373,8 +408,10 @@ def hold_check():
         tb = current.thesis.target_buy_price
         ts = current.thesis.target_sell_price
         age_d = (now_d - datetime.fromisoformat(current.audit_date).date()).days
-        age_str = f"[red]{age_d}d[/]" if age_d >= 180 else (
-            f"[yellow]{age_d}d[/]" if age_d >= 90 else f"[dim]{age_d}d[/]"
+        age_str = (
+            f"[red]{age_d}d[/]"
+            if age_d >= 180
+            else (f"[yellow]{age_d}d[/]" if age_d >= 90 else f"[dim]{age_d}d[/]")
         )
 
         status = "[dim]—[/]"
