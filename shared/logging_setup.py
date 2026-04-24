@@ -4,18 +4,59 @@ Structured logging — JSON-lines to logs/moatlens.log + console pretty print.
 Initialized once on web / CLI startup via setup_logging(). Safe to call
 multiple times (idempotent).
 """
+
 from __future__ import annotations
 
 import json
 import logging
-import os
+import re
 import sys
 from datetime import datetime, timezone
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
 
-
 _initialized = False
+
+# Redact any log extra whose key name hints at a credential, no matter
+# what the value looks like. Catches `logger.info("…", extra={"api_key": …})`
+# and similar accidents that would otherwise persist a live key to
+# logs/moatlens.log (file-rotated but still readable on disk/backup).
+_SECRET_KEY_RE = re.compile(
+    r"(key|secret|token|password|passwd|bearer|auth|credential|cookie)",
+    re.IGNORECASE,
+)
+_REDACTED = "[REDACTED]"
+
+
+def _is_secret_key(name: str) -> bool:
+    return bool(_SECRET_KEY_RE.search(name))
+
+
+_LOGRECORD_RESERVED = frozenset(
+    {
+        "name",
+        "msg",
+        "args",
+        "levelname",
+        "levelno",
+        "pathname",
+        "filename",
+        "module",
+        "exc_info",
+        "exc_text",
+        "stack_info",
+        "lineno",
+        "funcName",
+        "created",
+        "msecs",
+        "relativeCreated",
+        "thread",
+        "threadName",
+        "processName",
+        "process",
+        "message",
+    }
+)
 
 
 class JsonFormatter(logging.Formatter):
@@ -28,13 +69,10 @@ class JsonFormatter(logging.Formatter):
         }
         # Attach extras from record
         for k, v in record.__dict__.items():
-            if k in (
-                "name", "msg", "args", "levelname", "levelno",
-                "pathname", "filename", "module", "exc_info", "exc_text",
-                "stack_info", "lineno", "funcName", "created", "msecs",
-                "relativeCreated", "thread", "threadName", "processName",
-                "process", "message",
-            ):
+            if k in _LOGRECORD_RESERVED:
+                continue
+            if _is_secret_key(k):
+                payload[k] = _REDACTED
                 continue
             try:
                 json.dumps(v)  # serializable?
@@ -48,8 +86,11 @@ class JsonFormatter(logging.Formatter):
 
 class ConsoleFormatter(logging.Formatter):
     COLORS = {
-        "DEBUG": "\033[37m", "INFO": "\033[0m", "WARNING": "\033[33m",
-        "ERROR": "\033[31m", "CRITICAL": "\033[35m",
+        "DEBUG": "\033[37m",
+        "INFO": "\033[0m",
+        "WARNING": "\033[33m",
+        "ERROR": "\033[31m",
+        "CRITICAL": "\033[35m",
     }
     RESET = "\033[0m"
 
@@ -58,15 +99,12 @@ class ConsoleFormatter(logging.Formatter):
         color = self.COLORS.get(record.levelname, "")
         extras = []
         for k, v in record.__dict__.items():
-            if k in (
-                "name", "msg", "args", "levelname", "levelno",
-                "pathname", "filename", "module", "exc_info", "exc_text",
-                "stack_info", "lineno", "funcName", "created", "msecs",
-                "relativeCreated", "thread", "threadName", "processName",
-                "process", "message",
-            ):
+            if k in _LOGRECORD_RESERVED:
                 continue
-            extras.append(f"{k}={v}")
+            if _is_secret_key(k):
+                extras.append(f"{k}={_REDACTED}")
+            else:
+                extras.append(f"{k}={v}")
         extras_str = f" [{', '.join(extras)}]" if extras else ""
         msg = f"{color}{ts} {record.levelname:7s}{self.RESET} {record.name}: {record.getMessage()}{extras_str}"
         if record.exc_info:
@@ -98,7 +136,7 @@ def setup_logging(log_dir: Path | None = None, level: int = logging.INFO) -> Non
     log_dir.mkdir(parents=True, exist_ok=True)
     fh = RotatingFileHandler(
         log_dir / "moatlens.log",
-        maxBytes=5 * 1024 * 1024,   # 5 MB
+        maxBytes=5 * 1024 * 1024,  # 5 MB
         backupCount=3,
         encoding="utf-8",
     )
