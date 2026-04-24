@@ -29,7 +29,28 @@ STAGE_NAME = "安全边际 & 非对称性"
 
 
 def _kelly_fraction(win_prob: float, win_loss_ratio: float) -> float:
-    """Half-Kelly for practical use. f* = p - q/b, then × 0.5."""
+    """Half-Kelly **position-sizing heuristic**, not textbook Kelly.
+
+    Textbook Kelly (Thorp, 1962) applies to a discrete bet with:
+      - binary outcome (win $b or lose $1)
+      - known win probability p
+      - independent repeated trials
+
+    Our inputs stretch the framing:
+      - `win_loss_ratio` is `upside% / downside%` — the *asymmetric payoff*
+        between bull-IV and bear-IV scenarios, not a textbook "payoff ratio"
+      - `win_prob` is a coarse 50%/55% heuristic driven by MOS, not an
+        empirical frequency
+      - outcomes are continuous (DCF percentile), not binary
+      - "trials" aren't independent (your universe is ~30 tickers)
+
+    So this is a **sizing prior**, not a probabilistic edge. Read: "if
+    the Kelly calc says 0%, that's your system telling you this bet's
+    expected value is not positive under its own assumptions — not a
+    claim about the real world."
+
+    Formula: full = p - (1-p)/b; return max(0, full * 0.5) (half-Kelly).
+    """
     if win_loss_ratio <= 0:
         return 0
     q = 1 - win_prob
@@ -134,9 +155,14 @@ def run(
         kelly = _kelly_fraction(win_prob, win_loss)
         kelly_pct = kelly * 100
         findings.append("")
-        findings.append("**Kelly 仓位建议** (half-Kelly, 保守):")
-        findings.append(f"  假设胜率 {win_prob*100:.0f}% + 赔率 {win_loss:.1f}")
-        findings.append(f"  → 建议仓位 **{kelly_pct:.1f}%** of portfolio")
+        findings.append("**Kelly 仓位 heuristic** (half-Kelly; 不是教科书 Kelly):")
+        findings.append(
+            f"  胜率假设 {win_prob*100:.0f}% + 赔率 = upside%/downside% = {win_loss:.1f}"
+        )
+        findings.append(
+            "  注：教科书 Kelly 要二元输赢+独立重复+已知频率概率，本工具把它当**仓位 prior** 用，不是 EV 保证"
+        )
+        findings.append(f"  → 建议仓位上限 **{kelly_pct:.1f}%** of portfolio")
         if kelly_pct < 2:
             findings.append("  💡 Kelly 接近 0 — 收益不足补偿风险，可能该跳过")
         elif kelly_pct > 10:
