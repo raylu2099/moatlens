@@ -5,16 +5,22 @@ These are the highest-stakes calcs in the project — a wrong owner-earnings
 formula directly distorts the buy/sell price. Every change to
 `engine/stages/s5_owner_earnings.py` MUST keep these passing.
 """
+
 from __future__ import annotations
 
 import pytest
 
-from engine.stages.s5_owner_earnings import _compute_owner_earnings, _dupont
-
+from engine.stages.s5_owner_earnings import (
+    _compute_owner_earnings,
+    _dupont,
+    _effective_tax_rate_from_income,
+    _is_high_capex,
+)
 
 # =========================================================================
 # Owner earnings
 # =========================================================================
+
 
 def test_owner_earnings_basic_without_sbc():
     """
@@ -92,6 +98,7 @@ def test_owner_earnings_capex_sign_tolerant():
 # DuPont
 # =========================================================================
 
+
 def test_dupont_basic():
     """
     Net margin × Asset turnover × Leverage ≈ ROE.
@@ -123,3 +130,92 @@ def test_dupont_handles_zero_denominators():
     # With the current sentinel (denominators default to 1), everything collapses to 0.
     assert d["net_margin_pct"] == 0
     assert d["roe_pct"] == 0
+
+
+# =========================================================================
+# v0.6.1: DuPont with average assets (P1-2)
+# =========================================================================
+
+
+def test_dupont_without_balance_prev_uses_end_of_period():
+    """Legacy callers that don't pass balance_prev get the old single-period
+    behavior — this is what preserves all the pre-v0.6.1 numerical tests."""
+    income = {"net_income": 100, "revenue": 1000}
+    balance = {"total_assets": 500, "shareholders_equity": 200}
+    d = _dupont(income, balance)
+    assert d["used_average_assets"] is False
+    assert d["asset_turnover"] == pytest.approx(2.0)
+    assert d["leverage"] == pytest.approx(2.5)
+
+
+def test_dupont_with_balance_prev_averages_assets():
+    """CFA-canonical denominator: (begin + end)/2. A firm whose assets grew
+    from 400 → 500 over the year should get AT ≈ 1000/450 = 2.22, not
+    1000/500 = 2.0."""
+    income = {"net_income": 100, "revenue": 1000}
+    balance_end = {"total_assets": 500, "shareholders_equity": 200}
+    balance_begin = {"total_assets": 400, "shareholders_equity": 150}
+    d = _dupont(income, balance_end, balance_prev=balance_begin)
+
+    assert d["used_average_assets"] is True
+    assert d["asset_turnover"] == pytest.approx(1000 / 450, rel=1e-4)
+    assert d["leverage"] == pytest.approx(450 / 175, rel=1e-4)
+    # ROE identity still holds on averages: NI / avg_equity
+    assert d["roe_pct"] == pytest.approx(100 / 175 * 100, rel=1e-4)
+
+
+def test_dupont_balance_prev_falls_back_when_field_missing():
+    """If balance_prev is partial (missing a field), back-fill from end
+    rather than collapsing to the 1-sentinel. Otherwise a rollup that's
+    missing historical equity silently tanks the ROE."""
+    income = {"net_income": 100, "revenue": 1000}
+    balance_end = {"total_assets": 500, "shareholders_equity": 200}
+    balance_begin = {"total_assets": 400}  # equity missing
+    d = _dupont(income, balance_end, balance_prev=balance_begin)
+    # Equity averaged with fallback to ending (200, 200) → avg 200, not 100
+    assert d["leverage"] == pytest.approx(450 / 200, rel=1e-4)
+
+
+# =========================================================================
+# v0.6.1: high-capex industry matcher (P0-2)
+# =========================================================================
+
+
+def test_high_capex_sector_matches():
+    assert _is_high_capex("Energy", "") is True
+    assert _is_high_capex("Utilities", "") is True
+    assert _is_high_capex("Basic Materials", "") is True
+
+
+def test_high_capex_industry_keyword_matches():
+    """Semis are Technology-sector but deserve the caveat."""
+    assert _is_high_capex("Technology", "Semiconductors") is True
+    assert _is_high_capex("Industrials", "Airlines") is True
+
+
+def test_high_capex_asset_light_sectors_do_not_match():
+    """Buffett's approximation is fine for SaaS, consumer packaged goods,
+    banking etc. — don't spam the caveat."""
+    assert _is_high_capex("Technology", "Software - Application") is False
+    assert _is_high_capex("Consumer Defensive", "Beverages - Non-Alcoholic") is False
+    assert _is_high_capex("Financial Services", "Credit Services") is False
+
+
+# =========================================================================
+# v0.6.1: effective tax rate helper (P2-2)
+# =========================================================================
+
+
+def test_effective_tax_normal_year():
+    r = _effective_tax_rate_from_income({"pretax_income": 100, "income_tax_expense": 21})
+    assert r == pytest.approx(0.21)
+
+
+def test_effective_tax_loss_year_returns_none():
+    r = _effective_tax_rate_from_income({"pretax_income": -10, "income_tax_expense": 5})
+    assert r is None
+
+
+def test_effective_tax_outlier_returns_none():
+    r = _effective_tax_rate_from_income({"pretax_income": 100, "income_tax_expense": 80})
+    assert r is None  # > 35% → likely one-off, fall back to statutory
