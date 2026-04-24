@@ -17,6 +17,8 @@ DATE_STAMP="$(date +%Y-%m-%d)"
 SNAPSHOT_DIR="${DST}/${DATE_STAMP}"
 
 mkdir -p "${SNAPSHOT_DIR}"
+# Tighten perms on parent and this snapshot (.env lives here → must not be world-readable).
+chmod 700 "${DST}" "${SNAPSHOT_DIR}" 2>/dev/null || true
 
 echo "[$(date -Iseconds)] backing up ${PROJECT_DIR} → ${SNAPSHOT_DIR}"
 
@@ -37,6 +39,13 @@ rsync -a --delete ${LINK_DEST_ARG} \
     --exclude='data/cache/**' \
     --exclude='*' \
     "${PROJECT_DIR}/" "${SNAPSHOT_DIR}/"
+
+# Lock down .env copy so only the backup owner can read it.
+# rsync preserves source mode (usually 600) but be explicit — a user who
+# accidentally chmod'd the source .env won't silently propagate to the backup.
+if [ -f "${SNAPSHOT_DIR}/.env" ]; then
+    chmod 600 "${SNAPSHOT_DIR}/.env"
+fi
 
 # Prune old snapshots
 find "${DST}" -maxdepth 1 -type d -name '????-??-??' \
