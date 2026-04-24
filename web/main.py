@@ -913,9 +913,24 @@ async def portfolio(request: Request):
                     if price and audit_price > 0:
                         chg = (price - audit_price) / audit_price * 100
                         row["price_change_pct"] = chg
-                        # Review-needed heuristic: audit >= 30 days old AND
-                        # price moved >= 15%. Not "stop-loss" — just a prompt
-                        # to re-verify the thesis with fresh numbers.
+                        # Review-needed heuristic: audit ≥ 30 days old AND
+                        # |price change| ≥ 15%. This is NOT a stop-loss or
+                        # action signal — it's a prompt to re-run the 8-stage
+                        # audit with fresh numbers, not a call to trade.
+                        #
+                        # Thresholds chosen as the smallest pair that catches
+                        # "thesis likely stale" without spamming on normal
+                        # volatility:
+                        # - 30 days: one earnings / macro cycle; short enough
+                        #   that a ±15% swing actually suggests fundamentals
+                        #   moved, not just noise.
+                        # - 15%: roughly the 1σ range for a single stock over
+                        #   a month in a typical regime. Below 15% is noise;
+                        #   above 15% and age > 30d is "your model vs the
+                        #   market drifted far enough apart that one of you
+                        #   should take a look."
+                        # If the banner starts firing too often, tighten to
+                        # 20% / 45 days before adding sophistication.
                         if row.get("age_days") and row["age_days"] >= 30 and abs(chg) >= 15:
                             row["review_needed"] = True
                             direction = "涨" if chg > 0 else "跌"
