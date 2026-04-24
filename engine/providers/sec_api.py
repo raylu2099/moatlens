@@ -15,55 +15,58 @@ Return shape is always a dict/str — never raises to stages. Callers pattern:
 
 Why defensive: SEC enrichment is a *nice-to-have* color layer on top of
 verdict logic. If sec-api is down, audit must still produce a verdict.
+
+Auth: v0.6.1 moved the API key from `?token=` query to the `Authorization`
+header. sec-api.io's docs accept both; header form keeps the key out of
+proxy access logs, browser history, and our own structured request logs.
 """
 
 from __future__ import annotations
 
-import requests
-
 from engine.cache import cache_get, cache_set
+from engine.providers.base import (
+    DEFAULT_TIMEOUT,
+    DEFAULT_TIMEOUT_SLOW,
+    http_get,
+    http_post,
+    rate_limit_gate,
+)
 from shared.config import ApiKeys, Config
 
 API_BASE = "https://api.sec-api.io"
 # Cache SEC filing text aggressively — a 10-K doesn't change for a year.
 # We use the fundamentals TTL as a reasonable floor (12h) but in practice
 # the text is the same until the next filing.
+_FILING_TTL = 86400 * 30  # 30 days
 
 
 class SecApiError(RuntimeError):
     pass
 
 
-def _take_token() -> None:
-    try:
-        from shared.ratelimit import require_token
-
-        require_token("sec_api_io")
-    except ImportError:
-        pass
-    except Exception as e:
-        raise SecApiError(f"rate-limit: {e}")
+def _auth_header(keys: ApiKeys) -> dict:
+    """Per sec-api.io docs, `Authorization: <key>` is accepted without a
+    scheme prefix (not 'Bearer'). We keep that raw to match their examples."""
+    return {"Authorization": keys.sec_api_io}
 
 
 def _latest_10k_url(keys: ApiKeys, ticker: str) -> str | None:
     """Find the URL of the most recent 10-K for ticker."""
     if not keys.sec_api_io:
         raise SecApiError("SEC_API_IO_KEY missing")
-    _take_token()
-    try:
-        r = requests.post(
-            f"{API_BASE}",
-            params={"token": keys.sec_api_io},
-            json={
-                "query": f'ticker:{ticker} AND formType:"10-K"',
-                "from": "0",
-                "size": "1",
-                "sort": [{"filedAt": {"order": "desc"}}],
-            },
-            timeout=15,
-        )
-    except Exception as e:
-        raise SecApiError(f"network error: {e}")
+    rate_limit_gate("sec_api_io", SecApiError)
+    r = http_post(
+        API_BASE,
+        SecApiError,
+        headers=_auth_header(keys),
+        json={
+            "query": f'ticker:{ticker} AND formType:"10-K"',
+            "from": "0",
+            "size": "1",
+            "sort": [{"filedAt": {"order": "desc"}}],
+        },
+        timeout=DEFAULT_TIMEOUT,
+    )
     if r.status_code != 200:
         raise SecApiError(f"HTTP {r.status_code}: {r.text[:200]}")
     data = r.json()
@@ -77,20 +80,18 @@ def _extract_section(keys: ApiKeys, filing_url: str, item: str) -> str:
     """Call the Extractor endpoint for a specific 10-K section."""
     if not keys.sec_api_io:
         raise SecApiError("SEC_API_IO_KEY missing")
-    _take_token()
-    try:
-        r = requests.get(
-            f"{API_BASE}/extractor",
-            params={
-                "url": filing_url,
-                "item": item,
-                "type": "text",
-                "token": keys.sec_api_io,
-            },
-            timeout=30,
-        )
-    except Exception as e:
-        raise SecApiError(f"network error: {e}")
+    rate_limit_gate("sec_api_io", SecApiError)
+    r = http_get(
+        f"{API_BASE}/extractor",
+        SecApiError,
+        headers=_auth_header(keys),
+        params={
+            "url": filing_url,
+            "item": item,
+            "type": "text",
+        },
+        timeout=DEFAULT_TIMEOUT_SLOW,
+    )
     if r.status_code != 200:
         raise SecApiError(f"HTTP {r.status_code}: {r.text[:200]}")
     return r.text
@@ -104,7 +105,7 @@ def _cached_section(
     cache_ns: str,
 ) -> str:
     key = f"{ticker}:{item}"
-    cached = cache_get(cfg, cache_ns, key, ttl_seconds=86400 * 30)  # 30 days
+    cached = cache_get(cfg, cache_ns, key, ttl_seconds=_FILING_TTL)
     if cached is not None:
         return cached.get("text", "")
     url = _latest_10k_url(keys, ticker)

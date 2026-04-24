@@ -8,15 +8,23 @@ Free tier: 60 calls/min. Endpoints used (v0.6 surface):
 
 All methods are defensive — on any error, return empty structure. Stage
 keeps producing a verdict; Finnhub is color, not signal.
+
+Auth: v0.6.1 moved the API key from `?token=` query to the
+`X-Finnhub-Token` request header (per Finnhub docs). Keeps the key out of
+proxy logs and URL-based debug dumps.
 """
 
 from __future__ import annotations
 
 from datetime import datetime, timedelta
 
-import requests
-
-from engine.cache import cache_get, cache_set
+from engine.providers.base import (
+    DEFAULT_TIMEOUT,
+    cached_call,
+    http_get,
+    rate_limit_gate,
+    stable_cache_key,
+)
 from shared.config import ApiKeys, Config
 
 API_BASE = "https://finnhub.io/api/v1"
@@ -26,27 +34,21 @@ class FinnhubError(RuntimeError):
     pass
 
 
-def _take_token() -> None:
-    try:
-        from shared.ratelimit import require_token
-
-        require_token("finnhub")
-    except ImportError:
-        pass
-    except Exception as e:
-        raise FinnhubError(f"rate-limit: {e}")
+def _auth_header(keys: ApiKeys) -> dict:
+    return {"X-Finnhub-Token": keys.finnhub}
 
 
 def _api_get(keys: ApiKeys, path: str, params: dict) -> dict | list:
     if not keys.finnhub:
         raise FinnhubError("FINNHUB_API_KEY missing")
-    _take_token()
-    params = dict(params)
-    params["token"] = keys.finnhub
-    try:
-        r = requests.get(f"{API_BASE}/{path}", params=params, timeout=15)
-    except Exception as e:
-        raise FinnhubError(f"network error: {e}")
+    rate_limit_gate("finnhub", FinnhubError)
+    r = http_get(
+        f"{API_BASE}/{path}",
+        FinnhubError,
+        params=params,
+        headers=_auth_header(keys),
+        timeout=DEFAULT_TIMEOUT,
+    )
     if r.status_code == 401:
         raise FinnhubError("Invalid FINNHUB_API_KEY (401)")
     if r.status_code == 429:
@@ -64,13 +66,8 @@ def _cached_api_get(
     cache_ns: str,
     ttl: int = 21600,
 ) -> dict | list:
-    key = f"{path}?{'&'.join(f'{k}={v}' for k, v in sorted(params.items()))}"
-    cached = cache_get(cfg, cache_ns, key, ttl)
-    if cached is not None:
-        return cached.get("value") if isinstance(cached, dict) and "value" in cached else cached
-    data = _api_get(keys, path, params)
-    cache_set(cfg, cache_ns, key, {"value": data})
-    return data
+    key = stable_cache_key(path, params)
+    return cached_call(cfg, cache_ns, key, ttl, lambda: _api_get(keys, path, params))
 
 
 def fetch_insider_transactions(

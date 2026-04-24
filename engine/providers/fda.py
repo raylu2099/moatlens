@@ -15,15 +15,17 @@ any error. Callers treat output as optional enrichment.
 
 Heuristic: only useful when the company is classified as Healthcare. Stages
 should check sector before calling.
+
+Auth: none — both endpoints are public. The `rate_limit_gate` still applies
+because runaway loops are still runaway even without a key.
 """
 
 from __future__ import annotations
 
 from datetime import datetime
 
-import requests
-
 from engine.cache import cache_get, cache_set
+from engine.providers.base import DEFAULT_TIMEOUT_SLOW, http_get, rate_limit_gate
 from shared.config import ApiKeys, Config
 
 OPENFDA_BASE = "https://api.fda.gov"
@@ -32,17 +34,6 @@ CT_BASE = "https://clinicaltrials.gov/api/v2"
 
 class FdaError(RuntimeError):
     pass
-
-
-def _take_token() -> None:
-    try:
-        from shared.ratelimit import require_token
-
-        require_token("fda")
-    except ImportError:
-        pass
-    except Exception as e:
-        raise FdaError(f"rate-limit: {e}")
 
 
 def _cached_get(
@@ -56,11 +47,8 @@ def _cached_get(
     cached = cache_get(cfg, cache_ns, key, ttl)
     if cached is not None:
         return cached.get("value", {})
-    _take_token()
-    try:
-        r = requests.get(url, params=params, timeout=20)
-    except Exception as e:
-        raise FdaError(f"network error: {e}")
+    rate_limit_gate("fda", FdaError)
+    r = http_get(url, FdaError, params=params, timeout=DEFAULT_TIMEOUT_SLOW)
     if r.status_code == 404:
         cache_set(cfg, cache_ns, key, {"value": {}})
         return {}
@@ -231,11 +219,12 @@ def pipeline_summary(
 def test_connection(keys: ApiKeys) -> tuple[bool, str]:
     """Hits ClinicalTrials.gov with a known sponsor."""
     try:
-        _take_token()
-        r = requests.get(
+        rate_limit_gate("fda", FdaError)
+        r = http_get(
             f"{CT_BASE}/studies",
+            FdaError,
             params={"query.lead": "Novo Nordisk", "pageSize": "1"},
-            timeout=15,
+            timeout=DEFAULT_TIMEOUT_SLOW,
         )
         if r.status_code == 200:
             n = len(r.json().get("studies", []))

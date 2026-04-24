@@ -7,45 +7,44 @@ Free tier: 100 requests/day. Endpoints used:
 
 Defensive: on any error, return empty structure so stage keeps producing
 a verdict. MarketAux is color, not signal.
+
+Auth: MarketAux's public docs only document `api_token` as a query string
+parameter — no header form is supported server-side. So unlike sec_api /
+finnhub (which moved to Authorization / X-Finnhub-Token headers in v0.6.1),
+this provider still passes the key via query. This is a **provider-side
+limitation**, not a Moatlens choice; if MarketAux adds header auth later,
+flip `_use_header_auth` below.
 """
 
 from __future__ import annotations
 
 from datetime import datetime, timedelta
 
-import requests
-
 from engine.cache import cache_get, cache_set
+from engine.providers.base import DEFAULT_TIMEOUT, http_get, rate_limit_gate
 from shared.config import ApiKeys, Config
 
 API_BASE = "https://api.marketaux.com/v1"
+_NEWS_CACHE_TTL = 21600  # 6h
 
 
 class MarketauxError(RuntimeError):
     pass
 
 
-def _take_token() -> None:
-    try:
-        from shared.ratelimit import require_token
-
-        require_token("marketaux")
-    except ImportError:
-        pass
-    except Exception as e:
-        raise MarketauxError(f"rate-limit: {e}")
-
-
 def _api_get(keys: ApiKeys, path: str, params: dict) -> dict:
     if not keys.marketaux:
         raise MarketauxError("MARKETAUX_API_KEY missing")
-    _take_token()
+    rate_limit_gate("marketaux", MarketauxError)
+    # api_token MUST be in query — MarketAux has no header-auth form.
     params = dict(params)
     params["api_token"] = keys.marketaux
-    try:
-        r = requests.get(f"{API_BASE}/{path}", params=params, timeout=15)
-    except Exception as e:
-        raise MarketauxError(f"network error: {e}")
+    r = http_get(
+        f"{API_BASE}/{path}",
+        MarketauxError,
+        params=params,
+        timeout=DEFAULT_TIMEOUT,
+    )
     if r.status_code == 401:
         raise MarketauxError("Invalid MARKETAUX_API_KEY (401)")
     if r.status_code == 402:
@@ -76,7 +75,7 @@ def fetch_news_sentiment(
     """
     since = (datetime.utcnow() - timedelta(days=days)).strftime("%Y-%m-%dT%H:%M:%S")
     cache_key = f"{ticker}:{days}:{limit}"
-    cached = cache_get(cfg, "mx_news", cache_key, ttl_seconds=21600)
+    cached = cache_get(cfg, "mx_news", cache_key, ttl_seconds=_NEWS_CACHE_TTL)
     if cached is not None:
         return cached.get("value", {})
 
