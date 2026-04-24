@@ -38,7 +38,9 @@ repos:
 
       - id: pytest-fast
         name: pytest (fast subset)
-        entry: bash -c 'export MAMBA_ROOT_PREFIX=/volume1/homes/hellolufeng/micromamba && /volume1/homes/hellolufeng/bin/micromamba run -n ytdlp python -m pytest tests/ -x -q --ignore=tests/test_stream_adapter.py --ignore=tests/test_coach.py'
+        # Cross-machine: prefer NAS micromamba, fall back to Mac venv.
+        # Keeps the single-config approach instead of splitting Mac/NAS hooks.
+        entry: bash -c 'if [ -x /volume1/homes/hellolufeng/bin/micromamba ]; then export MAMBA_ROOT_PREFIX=/volume1/homes/hellolufeng/micromamba && /volume1/homes/hellolufeng/bin/micromamba run -n ytdlp python -m pytest tests/ -x -q --ignore=tests/test_stream_adapter.py --ignore=tests/test_coach.py; elif [ -x "$HOME/.venvs/moatlens/bin/python" ]; then "$HOME/.venvs/moatlens/bin/python" -m pytest tests/ -x -q --ignore=tests/test_stream_adapter.py --ignore=tests/test_coach.py; else echo "no moatlens python env found (expected /volume1/.../micromamba or ~/.venvs/moatlens)"; exit 1; fi'
         language: system
         pass_filenames: false
         stages: [pre-commit]
