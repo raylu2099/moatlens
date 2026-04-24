@@ -11,6 +11,7 @@ Rules:
 - OCF > Net Income (cash quality)
 - No audit qualifications
 """
+
 from __future__ import annotations
 
 import time
@@ -20,7 +21,6 @@ from engine.providers import financial_datasets as fd
 from shared.config import ApiKeys, Config
 
 from ._helpers import aggregate_verdict, make_metric
-
 
 STAGE_ID = 2
 STAGE_NAME = "诚实度测谎"
@@ -35,7 +35,9 @@ def run(cfg: Config, keys: ApiKeys, ticker: str) -> StageResult:
         cashflow = fd.fetch_cash_flow_statements(cfg, keys, ticker, period="annual", limit=3)
     except fd.FinancialDatasetsError as e:
         return StageResult(
-            stage_id=STAGE_ID, stage_name=STAGE_NAME, verdict=Verdict.SKIP,
+            stage_id=STAGE_ID,
+            stage_name=STAGE_NAME,
+            verdict=Verdict.SKIP,
             findings=[f"Data unavailable: {e}"],
             elapsed_seconds=time.time() - t0,
         )
@@ -45,7 +47,9 @@ def run(cfg: Config, keys: ApiKeys, ticker: str) -> StageResult:
 
     if not (income.periods and balance.periods and cashflow.periods):
         return StageResult(
-            stage_id=STAGE_ID, stage_name=STAGE_NAME, verdict=Verdict.SKIP,
+            stage_id=STAGE_ID,
+            stage_name=STAGE_NAME,
+            verdict=Verdict.SKIP,
             findings=["Missing statement data"],
             elapsed_seconds=time.time() - t0,
         )
@@ -59,59 +63,101 @@ def run(cfg: Config, keys: ApiKeys, ticker: str) -> StageResult:
     total_assets = bal0.get("total_assets") or 0
 
     # --- Accrual Ratio ---
+    # P1-4 (v0.6.1 audit): Richardson/Sloan convention — only *positive*
+    # accruals (earnings > cash) signal aggressive revenue recognition.
+    # Negative accruals (cash > earnings, e.g. asset sales, conservative
+    # accounting) are not a quality red flag. Previously we used
+    # `abs(accrual) < 10` which penalized a tidy conservative filer the
+    # same as an Enron-style aggressive one.
     if total_assets > 0:
         accrual = (ni - ocf) / total_assets * 100
-        metrics.append(make_metric(
-            "Accrual Ratio", round(accrual, 2),
-            "< 10% (越低越好)", abs(accrual) < 10, unit="%",
-            note="(净利润 - 经营现金流) / 总资产",
-        ))
+        if accrual < 0:
+            note_text = "负值 = 现金流 > 净利润 (保守记账，通常是好事)"
+        elif accrual < 10:
+            note_text = "(净利润 - 经营现金流) / 总资产；< 10% 正向 accrual 属正常"
+        else:
+            note_text = "⚠️ 正向 accrual > 10% — 利润远超现金流，Sloan 认为这是 aggressive 会计"
+        metrics.append(
+            make_metric(
+                "Accrual Ratio",
+                round(accrual, 2),
+                "< 10% (只罚正向超限)",
+                accrual < 10,
+                unit="%",
+                note=note_text,
+            )
+        )
 
     # --- OCF vs Net Income ---
     if ni > 0:
         ocf_ratio = ocf / ni
-        metrics.append(make_metric(
-            "OCF / Net Income", round(ocf_ratio, 2),
-            "> 1.0", ocf_ratio > 1.0, unit="x",
-            note="<1 则质疑利润质量 —— 利润未转化为现金",
-        ))
+        metrics.append(
+            make_metric(
+                "OCF / Net Income",
+                round(ocf_ratio, 2),
+                "> 1.0",
+                ocf_ratio > 1.0,
+                unit="x",
+                note="<1 则质疑利润质量 —— 利润未转化为现金",
+            )
+        )
 
     # --- Capex / Depreciation ---
     capex = abs(cf0.get("capital_expenditure") or 0)
     da = inc0.get("depreciation_and_amortization") or 0
     if da > 0 and capex > 0:
         capex_dep = capex / da
-        metrics.append(make_metric(
-            "Capex / Depreciation", round(capex_dep, 2),
-            "≥ 1.0", capex_dep >= 1.0, unit="x",
-            note="< 1 则公司在吃老本，设备旧了不换" if capex_dep < 1 else "维持性资本支出充分",
-        ))
+        metrics.append(
+            make_metric(
+                "Capex / Depreciation",
+                round(capex_dep, 2),
+                "≥ 1.0",
+                capex_dep >= 1.0,
+                unit="x",
+                note="< 1 则公司在吃老本，设备旧了不换" if capex_dep < 1 else "维持性资本支出充分",
+            )
+        )
 
     # --- Goodwill / Total Assets ---
     goodwill = bal0.get("goodwill") or 0
     if total_assets > 0:
         gw_ratio = goodwill / total_assets * 100
-        metrics.append(make_metric(
-            "Goodwill / Total Assets", round(gw_ratio, 1),
-            "< 20%", gw_ratio < 20, unit="%",
-            note="过高说明靠并购拼凑成长，而非有机增长",
-        ))
+        metrics.append(
+            make_metric(
+                "Goodwill / Total Assets",
+                round(gw_ratio, 1),
+                "< 20%",
+                gw_ratio < 20,
+                unit="%",
+                note="过高说明靠并购拼凑成长，而非有机增长",
+            )
+        )
 
     # --- Trend check on accrual ratio (3-year trend) ---
     if len(income.periods) >= 3 and len(cashflow.periods) >= 3 and len(balance.periods) >= 3:
         accruals = []
-        for i, b, c in zip(income.periods[:3], balance.periods[:3], cashflow.periods[:3]):
+        for i, b, c in zip(
+            income.periods[:3], balance.periods[:3], cashflow.periods[:3], strict=False
+        ):
             ta = b.get("total_assets") or 0
             if ta > 0:
-                a = ((i.get("net_income") or 0) - (c.get("net_cash_flow_from_operations") or 0)) / ta * 100
+                a = (
+                    ((i.get("net_income") or 0) - (c.get("net_cash_flow_from_operations") or 0))
+                    / ta
+                    * 100
+                )
                 accruals.append(a)
         if len(accruals) == 3:
             trend_rising = accruals[0] > accruals[1] > accruals[2]
-            metrics.append(make_metric(
-                "Accrual 趋势 (3Y)", f"{accruals[2]:.1f}% → {accruals[1]:.1f}% → {accruals[0]:.1f}%",
-                "非上升", not trend_rising,
-                note="上升趋势 = 利润质量恶化" if trend_rising else "趋势稳定或下降",
-            ))
+            metrics.append(
+                make_metric(
+                    "Accrual 趋势 (3Y)",
+                    f"{accruals[2]:.1f}% → {accruals[1]:.1f}% → {accruals[0]:.1f}%",
+                    "非上升",
+                    not trend_rising,
+                    note="上升趋势 = 利润质量恶化" if trend_rising else "趋势稳定或下降",
+                )
+            )
 
     verdict = aggregate_verdict(metrics)
 
