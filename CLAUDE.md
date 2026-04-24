@@ -70,7 +70,8 @@ Overrides the NAS-level `/volume1/homes/hellolufeng/CLAUDE.md` where they confli
 | Config loader | `shared/config.py` |
 | Prompt markdown | `prompts/s3_moat.md`, `s4_capital.md`, `s8_inversion.md` |
 | Quote library (45 quotes, 15 themes) | `prompts/wisdom.yaml` |
-| ADRs (8 key decisions) | `docs/adr/` |
+| ADRs (9 key decisions) | `docs/adr/` |
+| **Cross-machine Claude onboarding brief** (read this on fresh sessions) | `docs/claude-onboarding.md` |
 | Migration path (self-use → SaaS) | `docs/migration/v1-path.md` |
 | Budget tracking | `BUDGET.md` |
 | Backup script (add to cron) | `bin/backup.sh` |
@@ -80,7 +81,12 @@ Overrides the NAS-level `/volume1/homes/hellolufeng/CLAUDE.md` where they confli
 ## Working with this repo (for future Claude)
 
 ### Before making changes
-1. **Check `_WORK.md` at project root** — if it exists and status is "进行中" / "in progress",
+1. **On a fresh Claude session (especially Mac → after `git pull`)**: read
+   `docs/claude-onboarding.md` first. It's the 10-minute version of everything
+   the other-machine Claude learned across prior sessions — Ray's collaboration
+   style, already-rejected ideas, common pitfalls. Pairs with this CLAUDE.md
+   (this one is rules; that one is history/heuristics).
+2. **Check `_WORK.md` at project root** — if it exists and status is "进行中" / "in progress",
    read it first. It's a multi-session, multi-machine task handoff file written by a
    previous Claude (possibly on another machine via Synology Drive sync). Continue from
    the first unchecked subtask.
