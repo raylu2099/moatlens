@@ -66,6 +66,33 @@ def _atomic_write(path: Path, content: str) -> None:
     os.replace(tmp, path)
 
 
+def cleanup_orphan_tmp_files(cfg: Config, max_age_seconds: int = 3600) -> int:
+    """Sweep `.tmp` files left behind when a process was killed mid-write.
+
+    `_atomic_write` writes to `<path>.tmp` then `os.replace`s it. If the
+    process dies between those two calls (SIGKILL, OOM, NAS power loss),
+    the `.tmp` orphan persists forever. Any healthy in-flight write
+    finishes in milliseconds, so a tmp file older than `max_age_seconds`
+    (default 1h) is provably stranded — safe to remove.
+
+    Returns the count of files removed. Errors per-file are swallowed so
+    one bad inode (permission, race) doesn't crash startup.
+    """
+    import time
+
+    root = audits_root(cfg)
+    cutoff = time.time() - max_age_seconds
+    removed = 0
+    for tmp in root.rglob("*.tmp"):
+        try:
+            if tmp.stat().st_mtime < cutoff:
+                tmp.unlink()
+                removed += 1
+        except Exception:
+            continue
+    return removed
+
+
 def _row_from_report(report: AuditReport, md_path: Path, json_path: Path) -> dict:
     return {
         "ticker": report.ticker,

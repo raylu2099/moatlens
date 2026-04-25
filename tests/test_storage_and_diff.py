@@ -1,19 +1,28 @@
 """
 Integration tests for filesystem storage + audit diff.
 """
+
 from __future__ import annotations
 
 from datetime import datetime
-from pathlib import Path
 
 import pytest
 
 from engine.models import (
-    Action, AuditReport, ConfidenceLevel, Metric, StageResult, Verdict,
+    Action,
+    AuditReport,
+    ConfidenceLevel,
+    Metric,
+    StageResult,
+    Verdict,
 )
 from shared.config import Config
 from shared.storage import (
-    list_audits, load_audit, load_last_two_audits, save_audit,
+    cleanup_orphan_tmp_files,
+    list_audits,
+    load_audit,
+    load_last_two_audits,
+    save_audit,
 )
 from web.diff import compute_diff, render_audit_diff_html, render_audit_diff_text
 
@@ -40,20 +49,29 @@ def tmp_cfg(tmp_path) -> Config:
     )
 
 
-def _make_report(ticker: str, date: str, stage_values: dict[int, tuple[Verdict, float]]) -> AuditReport:
+def _make_report(
+    ticker: str, date: str, stage_values: dict[int, tuple[Verdict, float]]
+) -> AuditReport:
     """Build a minimal but diff-able report."""
     stages = []
     for sid in sorted(stage_values):
         verdict, metric_val = stage_values[sid]
         m = Metric(
-            name=f"metric_for_s{sid}", value=metric_val,
-            threshold=">=0", **{"pass": verdict == Verdict.PASS},
+            name=f"metric_for_s{sid}",
+            value=metric_val,
+            threshold=">=0",
+            **{"pass": verdict == Verdict.PASS},
         )
-        stages.append(StageResult(
-            stage_id=sid, stage_name=f"stage {sid}",
-            verdict=verdict, metrics=[m], findings=[],
-            raw_data={"cost_usd": 0.01 * sid},
-        ))
+        stages.append(
+            StageResult(
+                stage_id=sid,
+                stage_name=f"stage {sid}",
+                verdict=verdict,
+                metrics=[m],
+                findings=[],
+                raw_data={"cost_usd": 0.01 * sid},
+            )
+        )
     return AuditReport(
         ticker=ticker,
         company_name=f"{ticker} Corp",
@@ -69,6 +87,7 @@ def _make_report(ticker: str, date: str, stage_values: dict[int, tuple[Verdict, 
 # =========================================================================
 # Storage roundtrip
 # =========================================================================
+
 
 def test_save_and_load_roundtrip(tmp_cfg):
     report = _make_report("AAPL", "2026-04-10", {1: (Verdict.PASS, 67.0), 2: (Verdict.PASS, 3.5)})
@@ -105,6 +124,7 @@ def test_list_audits_sorts_newest_first(tmp_cfg):
 def test_list_audits_writes_incremental_index(tmp_cfg):
     """The _index.json should exist after a save, and repeated list_audits must be fast."""
     from shared.storage import _index_path
+
     r = _make_report("AAPL", "2026-04-18", {1: (Verdict.PASS, 1.0)})
     save_audit(tmp_cfg, r, "md")
     idx_path = _index_path(tmp_cfg)
@@ -178,6 +198,7 @@ def test_load_last_two_when_none(tmp_cfg):
 # Diff
 # =========================================================================
 
+
 def test_diff_detects_verdict_change():
     prev = _make_report("AAPL", "2026-01-10", {1: (Verdict.PASS, 1.0)})
     curr = _make_report("AAPL", "2026-04-10", {1: (Verdict.FAIL, 0.5)})
@@ -239,3 +260,61 @@ def test_diff_html_renderer_escapes_input():
     html = render_audit_diff_html(curr, prev)
     assert "<script>" not in html
     assert "&lt;script&gt;" in html
+
+
+# =========================================================================
+# Round-3 audit R3-2: orphan .tmp file sweep
+# =========================================================================
+
+
+def test_cleanup_orphan_tmp_files_removes_old(tmp_cfg):
+    """A `.tmp` file older than the cutoff is provably orphaned (atomic
+    writes finish in milliseconds), so the sweep should remove it."""
+    import os
+    import time
+
+    from shared.storage import audits_root
+
+    root = audits_root(tmp_cfg)
+    (root / "AAPL").mkdir()
+    orphan = root / "AAPL" / "2026-01-01.json.tmp"
+    orphan.write_text("partial")
+    # Backdate to 2 hours ago so it's safely past the 1h cutoff.
+    old = time.time() - 7200
+    os.utime(orphan, (old, old))
+
+    removed = cleanup_orphan_tmp_files(tmp_cfg, max_age_seconds=3600)
+    assert removed == 1
+    assert not orphan.exists()
+
+
+def test_cleanup_orphan_tmp_files_preserves_fresh(tmp_cfg):
+    """Recently-written .tmp could still be from a live writer — must keep."""
+    from shared.storage import audits_root
+
+    root = audits_root(tmp_cfg)
+    (root / "AAPL").mkdir()
+    fresh = root / "AAPL" / "2026-04-25.json.tmp"
+    fresh.write_text("partial")  # mtime = now, well within cutoff
+
+    removed = cleanup_orphan_tmp_files(tmp_cfg, max_age_seconds=3600)
+    assert removed == 0
+    assert fresh.exists()
+
+
+def test_cleanup_orphan_tmp_files_ignores_non_tmp(tmp_cfg):
+    """Real audit files must never be touched, regardless of age."""
+    import os
+    import time
+
+    from shared.storage import audits_root
+
+    root = audits_root(tmp_cfg)
+    (root / "AAPL").mkdir()
+    real = root / "AAPL" / "2025-01-01.json"
+    real.write_text('{"ticker": "AAPL"}')
+    old = time.time() - 86400 * 30  # 30 days
+    os.utime(real, (old, old))
+
+    cleanup_orphan_tmp_files(tmp_cfg, max_age_seconds=3600)
+    assert real.exists()

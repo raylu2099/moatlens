@@ -74,7 +74,13 @@ from shared.config import load_config, load_keys_from_env
 from shared.holdings import is_holding, load_holdings
 from shared.logging_setup import get_logger, setup_logging
 from shared.metrics import today_cost_utc
-from shared.storage import list_audits, load_audit, load_last_two_audits, save_audit
+from shared.storage import (
+    cleanup_orphan_tmp_files,
+    list_audits,
+    load_audit,
+    load_last_two_audits,
+    save_audit,
+)
 from web.diff import render_audit_diff_html
 
 setup_logging()
@@ -90,6 +96,9 @@ async def lifespan(app: FastAPI):
     try:
         cleanup_chats(cfg)
         cleanup_asks(cfg)
+        orphans = cleanup_orphan_tmp_files(cfg)
+        if orphans:
+            log.info("startup tmp orphan sweep", extra={"removed": orphans})
         _recover_stale_sessions()
     except Exception as e:
         print(f"[startup] cleanup error: {e}", file=sys.stderr)
