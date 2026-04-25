@@ -14,22 +14,53 @@ Knobs for iteration speed:
 Hardening:
 - Per-stage exceptions become Verdict.SKIP with the reason in findings.
 - Stage 8 is gated on prior-stage signal density to avoid burning Claude on empty data.
+
+# Parallelism opportunity (round-2 audit P2-5, NOT implemented)
+# --------------------------------------------------------------
+# Stages 2 (integrity) and 3 (moat) have no mutual data dependency — s3
+# reads `prior.get(1, {})`, not prior[2]. Running them concurrently could
+# save ~15-20 seconds on a --with-claude audit (stage 3's Perplexity +
+# Claude round trip dominates; stage 2 is pure Financial Datasets).
+#
+# Deliberately **not implemented** here because:
+#   1. progress_callback is load-bearing UX for the SSE chat stream — the
+#      user watches stages appear in canonical order; parallelizing requires
+#      either buffering (breaks the "feels live" affordance) or reordering
+#      (2 appears before 3 even if 3 finishes first — confusing).
+#   2. Rate limiters are per-process, not per-key; two concurrent Claude
+#      calls from the same process can spike budget in ways the token
+#      bucket's current capacity wasn't tuned for.
+#   3. Exception surfaces multiply. `_run_stage_safe` already traps per-
+#      stage failures, but a ThreadPoolExecutor adds a wrapper that can
+#      silently swallow its own errors if misused.
+#
+# If this ever gets implemented, the right shape is: an opt-in
+# `parallel_stage_groups: list[tuple[int, ...]]` kwarg default None; when
+# set, run each group's stages in `concurrent.futures.ThreadPoolExecutor`,
+# JOIN all, then emit progress_callbacks + prior[sid] updates in canonical
+# stage order. Cost tracking happens after the join to avoid racy writes
+# to report.total_api_cost_usd.
 """
+
 from __future__ import annotations
 
 import traceback
+from collections.abc import Callable, Generator, Iterable
 from datetime import datetime
-from typing import Callable, Generator, Iterable
 
 from engine.models import Action, AuditReport, ConfidenceLevel, StageResult, Thesis, Verdict
 from engine.providers import yfinance_provider as yfp
 from engine.stages import (
-    s1_competence, s2_integrity, s3_moat,
-    s4_capital, s5_owner_earnings, s6_valuation,
-    s7_safety, s8_inversion,
+    s1_competence,
+    s2_integrity,
+    s3_moat,
+    s4_capital,
+    s5_owner_earnings,
+    s6_valuation,
+    s7_safety,
+    s8_inversion,
 )
 from shared.config import ApiKeys, Config
-
 
 # Stage IDs that invoke Claude — these are the ones skipped by --no-claude.
 CLAUDE_STAGE_IDS = {3, 4, 8}
@@ -38,23 +69,30 @@ CLAUDE_STAGE_IDS = {3, 4, 8}
 def _stage1(cfg, keys, ticker, tech_mode, prior):
     return s1_competence.run(cfg, keys, ticker, tech_mode=tech_mode)
 
+
 def _stage2(cfg, keys, ticker, tech_mode, prior):
     return s2_integrity.run(cfg, keys, ticker)
+
 
 def _stage3(cfg, keys, ticker, tech_mode, prior):
     return s3_moat.run(cfg, keys, ticker, prior.get(1, {}), tech_mode=tech_mode)
 
+
 def _stage4(cfg, keys, ticker, tech_mode, prior):
     return s4_capital.run(cfg, keys, ticker, prior.get(1, {}))
+
 
 def _stage5(cfg, keys, ticker, tech_mode, prior):
     return s5_owner_earnings.run(cfg, keys, ticker, tech_mode=tech_mode)
 
+
 def _stage6(cfg, keys, ticker, tech_mode, prior):
     return s6_valuation.run(cfg, keys, ticker, tech_mode=tech_mode)
 
+
 def _stage7(cfg, keys, ticker, tech_mode, prior):
     return s7_safety.run(cfg, keys, ticker, prior.get(6, {}))
+
 
 def _stage8(cfg, keys, ticker, tech_mode, prior, anchor_thesis="", my_variant_view=""):
     # Gating: if fewer than 2 of the prior qualitative/valuation stages produced
@@ -66,9 +104,12 @@ def _stage8(cfg, keys, ticker, tech_mode, prior, anchor_thesis="", my_variant_vi
         raw = prior.get(sid, {}) or {}
         if not raw or raw.get("error"):
             continue
-        if (raw.get("claude_parsed") or raw.get("valuation")
-                or raw.get("base_iv")
-                or raw.get("margin_of_safety_pct") is not None):
+        if (
+            raw.get("claude_parsed")
+            or raw.get("valuation")
+            or raw.get("base_iv")
+            or raw.get("margin_of_safety_pct") is not None
+        ):
             useful += 1
 
     if useful < 2:
@@ -80,13 +121,16 @@ def _stage8(cfg, keys, ticker, tech_mode, prior, anchor_thesis="", my_variant_vi
                 f"⚠️ 跳过 Stage 8：前序 stage 3/4/6/7 中仅 {useful} 个产生可用信号，"
                 "Claude 推理缺乏依据。先修复前序 stage 再重跑。",
             ],
-            raw_data={"skipped_reason": "insufficient_prior_signals",
-                      "useful_prior_count": useful},
+            raw_data={"skipped_reason": "insufficient_prior_signals", "useful_prior_count": useful},
         )
 
     prior_for_s8 = {f"stage{k}": v for k, v in prior.items() if k in relevant_ids}
     return s8_inversion.run(
-        cfg, keys, ticker, anchor_thesis, prior_for_s8,
+        cfg,
+        keys,
+        ticker,
+        anchor_thesis,
+        prior_for_s8,
         my_variant_view=my_variant_view,
     )
 
@@ -104,8 +148,10 @@ STAGES: list[tuple[int, Callable]] = [
 
 
 def _new_report(
-    ticker: str, anchor_thesis: str = "",
-    my_market_expectation: str = "", my_variant_view: str = "",
+    ticker: str,
+    anchor_thesis: str = "",
+    my_market_expectation: str = "",
+    my_variant_view: str = "",
 ) -> AuditReport:
     company = yfp.fetch_company_info(ticker)
     return AuditReport(
@@ -125,8 +171,7 @@ def _compute_final_verdict(report: AuditReport) -> tuple[Action, ConfidenceLevel
 
     critical_stages = {1, 2, 7}
     critical_fail = any(
-        s.stage_id in critical_stages and s.verdict == Verdict.FAIL
-        for s in report.stages
+        s.stage_id in critical_stages and s.verdict == Verdict.FAIL for s in report.stages
     )
 
     if critical_fail or fail_count >= 3:
@@ -199,15 +244,28 @@ def _track_cost(report: AuditReport, stage: StageResult) -> None:
 
 
 def _run_stage_safe(
-    stage_id: int, fn: Callable, cfg, keys, ticker, tech_mode, prior, anchor_thesis,
+    stage_id: int,
+    fn: Callable,
+    cfg,
+    keys,
+    ticker,
+    tech_mode,
+    prior,
+    anchor_thesis,
     my_variant_view: str = "",
 ) -> StageResult:
     """Run a stage with a hard safety net — any exception becomes SKIP."""
     try:
         if stage_id == 8:
-            return fn(cfg, keys, ticker, tech_mode, prior,
-                      anchor_thesis=anchor_thesis,
-                      my_variant_view=my_variant_view)
+            return fn(
+                cfg,
+                keys,
+                ticker,
+                tech_mode,
+                prior,
+                anchor_thesis=anchor_thesis,
+                my_variant_view=my_variant_view,
+            )
         return fn(cfg, keys, ticker, tech_mode, prior)
     except Exception as e:
         tb = traceback.format_exc(limit=3)
@@ -223,10 +281,14 @@ def _run_stage_safe(
 def _skipped(stage_id: int, reason_cn: str) -> StageResult:
     """Make a synthetic SKIP result (used by --no-claude / --only / --from)."""
     name_map = {
-        1: s1_competence.STAGE_NAME, 2: s2_integrity.STAGE_NAME,
-        3: s3_moat.STAGE_NAME, 4: s4_capital.STAGE_NAME,
-        5: s5_owner_earnings.STAGE_NAME, 6: s6_valuation.STAGE_NAME,
-        7: s7_safety.STAGE_NAME, 8: s8_inversion.STAGE_NAME,
+        1: s1_competence.STAGE_NAME,
+        2: s2_integrity.STAGE_NAME,
+        3: s3_moat.STAGE_NAME,
+        4: s4_capital.STAGE_NAME,
+        5: s5_owner_earnings.STAGE_NAME,
+        6: s6_valuation.STAGE_NAME,
+        7: s7_safety.STAGE_NAME,
+        8: s8_inversion.STAGE_NAME,
     }
     return StageResult(
         stage_id=stage_id,
@@ -295,7 +357,9 @@ def _skip_reason(sid: int, only_stages, from_stage, skip_claude) -> str:
 
 
 def run_audit_auto(
-    cfg: Config, keys: ApiKeys, ticker: str,
+    cfg: Config,
+    keys: ApiKeys,
+    ticker: str,
     anchor_thesis: str = "",
     tech_mode: bool = False,
     progress_callback: Callable[[int, StageResult], None] | None = None,
@@ -307,7 +371,8 @@ def run_audit_auto(
     my_variant_view: str = "",
 ) -> AuditReport:
     report = resume_from or _new_report(
-        ticker, anchor_thesis,
+        ticker,
+        anchor_thesis,
         my_market_expectation=my_market_expectation,
         my_variant_view=my_variant_view,
     )
@@ -332,7 +397,14 @@ def run_audit_auto(
             result = _skipped(sid, reason)
         elif sid in to_run:
             result = _run_stage_safe(
-                sid, fn, cfg, keys, ticker, tech_mode, prior, anchor_thesis,
+                sid,
+                fn,
+                cfg,
+                keys,
+                ticker,
+                tech_mode,
+                prior,
+                anchor_thesis,
                 my_variant_view=effective_variant,
             )
         else:
@@ -352,7 +424,9 @@ def run_audit_auto(
 
 
 def run_audit_wizard(
-    cfg: Config, keys: ApiKeys, ticker: str,
+    cfg: Config,
+    keys: ApiKeys,
+    ticker: str,
     anchor_thesis: str = "",
     tech_mode: bool = False,
     resume_from: AuditReport | None = None,
@@ -363,7 +437,8 @@ def run_audit_wizard(
     my_variant_view: str = "",
 ) -> Generator[tuple[int, StageResult, AuditReport], bool, AuditReport]:
     report = resume_from or _new_report(
-        ticker, anchor_thesis,
+        ticker,
+        anchor_thesis,
         my_market_expectation=my_market_expectation,
         my_variant_view=my_variant_view,
     )
@@ -383,7 +458,14 @@ def run_audit_wizard(
             result = _skipped(sid, reason)
         elif sid in to_run:
             result = _run_stage_safe(
-                sid, fn, cfg, keys, ticker, tech_mode, prior, anchor_thesis,
+                sid,
+                fn,
+                cfg,
+                keys,
+                ticker,
+                tech_mode,
+                prior,
+                anchor_thesis,
                 my_variant_view=effective_variant,
             )
         else:
