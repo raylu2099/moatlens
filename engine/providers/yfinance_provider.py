@@ -7,6 +7,7 @@ Used for:
 - .info fields (market cap, trailing PE, forward PE, beta)
 - Historical multiple calculations
 """
+
 from __future__ import annotations
 
 import sys
@@ -19,7 +20,7 @@ import yfinance as yf
 class PriceHistory:
     ticker: str
     close_prices: list[float]  # newest last
-    dates: list[str]           # YYYY-MM-DD
+    dates: list[str]  # YYYY-MM-DD
 
 
 @dataclass
@@ -31,7 +32,7 @@ class MultipleSnapshot:
     price_to_book: float | None = None
     peg_ratio: float | None = None
     dividend_yield: float | None = None
-    market_cap: float | None = None       # in USD
+    market_cap: float | None = None  # in USD
     enterprise_value: float | None = None
     ev_to_ebitda: float | None = None
     beta: float | None = None
@@ -81,7 +82,13 @@ def fetch_current_price(ticker: str) -> float | None:
 
 
 def fetch_company_info(ticker: str) -> dict:
-    """Return metadata useful for context (sector, industry, long biz summary)."""
+    """Return metadata useful for context (sector, industry, long biz summary).
+
+    R3-7: also surfaces `quote_type` (EQUITY / ETF / MUTUALFUND / CURRENCY)
+    so s1 can hard-stop ETF audits — the framework is built for analyzing
+    a single business, not a basket. ETFs need a holdings-level analysis
+    not a moat / management / DCF on aggregated metrics.
+    """
     try:
         info = yf.Ticker(ticker).info or {}
         return {
@@ -92,6 +99,7 @@ def fetch_company_info(ticker: str) -> dict:
             "website": info.get("website", ""),
             "business_summary": info.get("longBusinessSummary", ""),
             "full_time_employees": info.get("fullTimeEmployees"),
+            "quote_type": info.get("quoteType", ""),
         }
     except Exception:
         return {"long_name": ticker}

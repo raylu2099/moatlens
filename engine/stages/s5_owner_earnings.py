@@ -220,6 +220,26 @@ def run(
     company_info = yfp.fetch_company_info(ticker)
     sector = (company_info.get("sector") or "").strip()
     industry = (company_info.get("industry") or "").strip()
+
+    # R3-7: pre-revenue biotech / clinical-stage flag. Owner Earnings is a
+    # cash-flow-from-mature-operations construct; for a biotech with
+    # near-zero revenue and ongoing trial spend, OE is structurally
+    # negative and the metric/threshold (`OE margin ≥ 15%`) is meaningless.
+    # Don't change the formula — surface the situation so the verdict is
+    # read in context (often a venture-style bet, not a value-investing one).
+    latest_rev_check = (income.periods[0].get("revenue") or 0) if income.periods else 0
+    is_biotech = sector == "Healthcare" and any(
+        k in industry.lower() for k in ("biotechnology", "drug manufacturers", "pharmaceutic")
+    )
+    if is_biotech and latest_rev_check < 50_000_000:  # < $50M = effectively pre-revenue
+        findings.append(
+            f"⚠️ **临床期/前期生物科技**: {industry} TTM 收入 "
+            f"${latest_rev_check / 1e6:.1f}M（< $50M）。"
+            "Owner Earnings 在这类标的上结构性为负 — 公司还在烧钱做试验。"
+            "用 OE 阈值（≥15% 利润率）评判它没有意义；"
+            "应该看 cash runway / pipeline 进展 / 关键试验的相对优势，而不是这页指标。"
+        )
+
     if _is_high_capex(sector, industry):
         findings.append(
             f"⚠️ **维护性 CapEx 不确定性**: {sector or 'unknown'} / {industry or 'unknown'} "

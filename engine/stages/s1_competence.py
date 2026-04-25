@@ -14,10 +14,10 @@ Rules:
 Tech stock adjustment: gross margin threshold varies by industry
 (software > 70%, hardware > 25%) — applied in tech mode.
 """
+
 from __future__ import annotations
 
 import time
-from typing import Any
 
 from engine.models import StageResult, Verdict
 from engine.providers import financial_datasets as fd
@@ -26,7 +26,6 @@ from shared.config import ApiKeys, Config
 
 from ._helpers import aggregate_verdict, cagr, make_metric
 
-
 STAGE_ID = 1
 STAGE_NAME = "能力圈 & 垃圾桶测试"
 
@@ -34,7 +33,7 @@ STAGE_NAME = "能力圈 & 垃圾桶测试"
 def _compute_roic(income: list[dict], balance: list[dict]) -> list[float]:
     """Return ROIC % per year, newest first."""
     results = []
-    for i_stmt, b_stmt in zip(income, balance):
+    for i_stmt, b_stmt in zip(income, balance, strict=False):
         try:
             ebit = i_stmt.get("operating_income") or i_stmt.get("ebit")
             tax = i_stmt.get("income_tax_expense") or 0
@@ -84,19 +83,41 @@ def _altman_z(income: dict, balance: dict, market_cap: float | None) -> float | 
 def run(cfg: Config, keys: ApiKeys, ticker: str, tech_mode: bool = False) -> StageResult:
     t0 = time.time()
 
+    # R3-7: ETF / mutual fund / index gate. The 8-stage framework analyzes
+    # a single business (moat, management, capex). For a basket like SPY or
+    # QQQ all the metrics — ROIC, gross margin, Altman Z — are weighted
+    # averages across hundreds of holdings, which is meaningless. Refuse
+    # at the door rather than emit nonsense numbers.
+    info = yfp.fetch_company_info(ticker)
+    quote_type = (info.get("quote_type") or "").upper()
+    if quote_type in {"ETF", "MUTUALFUND", "INDEX", "CURRENCY"}:
+        return StageResult(
+            stage_id=STAGE_ID,
+            stage_name=STAGE_NAME,
+            verdict=Verdict.FAIL,
+            findings=[
+                f"⛔ **{ticker}** 是 {quote_type}，不是单一公司。"
+                "Moatlens 框架（护城河 / 管理层 / DCF）只适用于个股，"
+                "对 ETF/基金/指数应做 holdings 层面分析。请改用单只成分股。",
+            ],
+            raw_data={"quote_type": quote_type, "company_info": info},
+            elapsed_seconds=time.time() - t0,
+        )
+
     # Fetch data
     try:
         income = fd.fetch_income_statements(cfg, keys, ticker, period="annual", limit=6)
         balance = fd.fetch_balance_sheets(cfg, keys, ticker, period="annual", limit=6)
     except fd.FinancialDatasetsError as e:
         return StageResult(
-            stage_id=STAGE_ID, stage_name=STAGE_NAME, verdict=Verdict.SKIP,
+            stage_id=STAGE_ID,
+            stage_name=STAGE_NAME,
+            verdict=Verdict.SKIP,
             findings=[f"Data unavailable: {e}"],
             elapsed_seconds=time.time() - t0,
         )
 
     multiples = yfp.fetch_multiples(ticker)
-    info = yfp.fetch_company_info(ticker)
 
     metrics = []
     findings = []
@@ -106,11 +127,16 @@ def run(cfg: Config, keys: ApiKeys, ticker: str, tech_mode: bool = False) -> Sta
     if roics:
         avg_roic = sum(roics[:5]) / min(len(roics), 5)
         pass_roic = avg_roic > 15
-        metrics.append(make_metric(
-            "ROIC (5Y avg)", round(avg_roic, 1),
-            "> 15%", pass_roic, unit="%",
-            note=f"Individual years: {[round(r, 1) for r in roics[:5]]}",
-        ))
+        metrics.append(
+            make_metric(
+                "ROIC (5Y avg)",
+                round(avg_roic, 1),
+                "> 15%",
+                pass_roic,
+                unit="%",
+                note=f"Individual years: {[round(r, 1) for r in roics[:5]]}",
+            )
+        )
     else:
         metrics.append(make_metric("ROIC (5Y avg)", None, "> 15%", False, note="计算失败"))
 
@@ -122,11 +148,16 @@ def run(cfg: Config, keys: ApiKeys, ticker: str, tech_mode: bool = False) -> Sta
         cogs = latest.get("cost_of_revenue") or 0
         if revenue > 0:
             gm = (revenue - cogs) / revenue * 100
-            metrics.append(make_metric(
-                "Gross Margin (TTM)", round(gm, 1),
-                f"> {gm_threshold}%", gm > gm_threshold, unit="%",
-                note="定价权标志" if gm > gm_threshold else "可能处于产业链苦力位",
-            ))
+            metrics.append(
+                make_metric(
+                    "Gross Margin (TTM)",
+                    round(gm, 1),
+                    f"> {gm_threshold}%",
+                    gm > gm_threshold,
+                    unit="%",
+                    note="定价权标志" if gm > gm_threshold else "可能处于产业链苦力位",
+                )
+            )
 
     # --- Interest coverage ---
     if income.periods:
@@ -135,16 +166,25 @@ def run(cfg: Config, keys: ApiKeys, ticker: str, tech_mode: bool = False) -> Sta
         interest = latest.get("interest_expense") or 0
         if interest > 0:
             coverage = ebit / interest
-            metrics.append(make_metric(
-                "Interest Coverage", round(coverage, 1),
-                "> 5x", coverage > 5, unit="x",
-            ))
+            metrics.append(
+                make_metric(
+                    "Interest Coverage",
+                    round(coverage, 1),
+                    "> 5x",
+                    coverage > 5,
+                    unit="x",
+                )
+            )
         else:
-            metrics.append(make_metric(
-                "Interest Coverage", "∞",
-                "> 5x", True,
-                note="零利息支出 (无长期债务)",
-            ))
+            metrics.append(
+                make_metric(
+                    "Interest Coverage",
+                    "∞",
+                    "> 5x",
+                    True,
+                    note="零利息支出 (无长期债务)",
+                )
+            )
 
     # --- Revenue growth (5Y CAGR) ---
     if len(income.periods) >= 5:
@@ -153,31 +193,41 @@ def run(cfg: Config, keys: ApiKeys, ticker: str, tech_mode: bool = False) -> Sta
         if latest_rev and old_rev:
             rev_cagr = cagr(latest_rev, old_rev, 4)
             if rev_cagr is not None:
-                metrics.append(make_metric(
-                    "Revenue CAGR (5Y)", round(rev_cagr, 1),
-                    "> 0%", rev_cagr > 0, unit="%",
-                ))
+                metrics.append(
+                    make_metric(
+                        "Revenue CAGR (5Y)",
+                        round(rev_cagr, 1),
+                        "> 0%",
+                        rev_cagr > 0,
+                        unit="%",
+                    )
+                )
 
     # --- Altman Z-score ---
     if income.periods and balance.periods:
         z = _altman_z(income.periods[0], balance.periods[0], multiples.market_cap)
         if z is not None:
-            metrics.append(make_metric(
-                "Altman Z-score", round(z, 1),
-                "> 2.5", z > 2.5, unit="",
-                note="破产风险预警" if z <= 2.5 else "财务稳健",
-            ))
+            metrics.append(
+                make_metric(
+                    "Altman Z-score",
+                    round(z, 1),
+                    "> 2.5",
+                    z > 2.5,
+                    unit="",
+                    note="破产风险预警" if z <= 2.5 else "财务稳健",
+                )
+            )
 
     # --- Qualitative findings ---
     company_name = info.get("long_name", ticker)
     biz_summary = info.get("business_summary", "")
     if biz_summary:
-        findings.append(f"**{company_name}** ({info.get('sector', '?')} / {info.get('industry', '?')})")
+        findings.append(
+            f"**{company_name}** ({info.get('sector', '?')} / {info.get('industry', '?')})"
+        )
         findings.append(f"Business: {biz_summary[:300]}...")
 
-    findings.append(
-        "⚠️ 能力圈自检（系统无法替你判断）：你能用 2-3 句话讲清楚这家公司怎么赚钱吗？"
-    )
+    findings.append("⚠️ 能力圈自检（系统无法替你判断）：你能用 2-3 句话讲清楚这家公司怎么赚钱吗？")
 
     verdict = aggregate_verdict(metrics)
 

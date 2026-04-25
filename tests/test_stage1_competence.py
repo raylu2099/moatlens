@@ -144,6 +144,78 @@ def test_altman_z_zero_total_assets_returns_none():
     assert _altman_z(income, balance, market_cap=100) is None
 
 
+# =========================================================================
+# R3-7: ETF / fund / index gate at top of run()
+# =========================================================================
+
+
+def test_run_refuses_etf_quote_type(monkeypatch):
+    """ETFs are baskets, not businesses — moat / DCF is meaningless on
+    aggregated metrics. The gate must return FAIL before any data fetch."""
+    from pathlib import Path
+
+    from engine.stages import s1_competence
+    from shared.config import ApiKeys, Config
+
+    monkeypatch.setattr(
+        s1_competence.yfp,
+        "fetch_company_info",
+        lambda t: {"long_name": "SPDR S&P 500", "quote_type": "ETF"},
+    )
+
+    cfg = Config(
+        data_dir=Path("/tmp"),
+        cache_dir=Path("/tmp"),
+        prompts_dir=Path("/tmp"),
+        docs_dir=Path("/tmp"),
+        claude_model="haiku",
+        pplx_model_search="sonar",
+        pplx_model_analysis="sonar-pro",
+        cache_fundamentals_ttl=60,
+        cache_perplexity_ttl=60,
+        cache_macro_ttl=60,
+        project_root=Path("/tmp"),
+    )
+    result = s1_competence.run(cfg, ApiKeys(), "SPY")
+    from engine.models import Verdict
+
+    assert result.verdict == Verdict.FAIL
+    assert "ETF" in result.findings[0]
+    assert result.raw_data["quote_type"] == "ETF"
+
+
+def test_run_refuses_mutual_fund(monkeypatch):
+    """Same gate covers MUTUALFUND and INDEX."""
+    from pathlib import Path
+
+    from engine.stages import s1_competence
+    from shared.config import ApiKeys, Config
+
+    monkeypatch.setattr(
+        s1_competence.yfp,
+        "fetch_company_info",
+        lambda t: {"long_name": "Some Fund", "quote_type": "MUTUALFUND"},
+    )
+
+    cfg = Config(
+        data_dir=Path("/tmp"),
+        cache_dir=Path("/tmp"),
+        prompts_dir=Path("/tmp"),
+        docs_dir=Path("/tmp"),
+        claude_model="haiku",
+        pplx_model_search="sonar",
+        pplx_model_analysis="sonar-pro",
+        cache_fundamentals_ttl=60,
+        cache_perplexity_ttl=60,
+        cache_macro_ttl=60,
+        project_root=Path("/tmp"),
+    )
+    result = s1_competence.run(cfg, ApiKeys(), "VTSAX")
+    from engine.models import Verdict
+
+    assert result.verdict == Verdict.FAIL
+
+
 def test_altman_z_handles_missing_total_liabilities():
     """Some balance sheets (pre-IPO / fund) lack `total_liabilities`. The
     equity/liabilities term should degrade to 0 rather than raise."""

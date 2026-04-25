@@ -395,6 +395,22 @@ def run(
             f"(纯股本 WACC — {'无显著债务' if total_debt == 0 else '缺 market cap / debt 数据，未做加权'})"
         )
 
+    # R3-7: non-US ticker WACC bias warning. WACC components are calibrated
+    # to the US market: 10Y Treasury risk-free, 5.5% US ERP, 21% US tax rate.
+    # For a Chinese, European, or Japanese company, these inputs systematically
+    # under- or over-state the discount rate and the resulting IV is biased.
+    # Surface this as a finding so the user discounts the number rather than
+    # treating it as authoritative.
+    country = (company_info.get("country") or "").strip()
+    non_us_country = country and country not in {"United States", "USA", "US", ""}
+    if non_us_country:
+        findings.append(
+            f"⚠️ **非美股 WACC 偏差**: {ticker} 注册地 {country}。"
+            "WACC 组件（risk-free 10Y UST、ERP 5.5%、税率 21%）按美国市场校准，"
+            "对非美企业（不同央行政策利率、不同 country risk premium、不同企业税率）"
+            "得到的 IV 系统性偏差。把这个数字当参考而非定论。"
+        )
+
     # --- 3 scenarios (industry-aware) ---
     (bear_g, base_g, bull_g), scenario_source = _scenarios_for_sector(sector)
     findings.append(
