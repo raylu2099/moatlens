@@ -1,0 +1,732 @@
+/* ===========================================================================
+   Moatlens — Editorial design system (v0.7)
+   ===========================================================================
+
+   Aesthetic: Editorial financial broadsheet meets Munger margin annotations.
+   Why: Buffett/Munger thinking is anti-trading-app. The page reads like a
+   serious financial publication — "read carefully, think slowly" — not a
+   click-fast dashboard.
+
+   Architecture:
+   - Layered ON TOP of the existing tailwind.min.css. Tailwind owns layout
+     (grid, flex, spacing, responsive); this file owns color tokens, type,
+     and bespoke editorial components.
+   - CSS variables drive light/dark — the same components work in both modes
+     with no class swaps in markup.
+   - Self-fallback fonts: if Google Fonts is blocked (GFW / offline), the
+     stack degrades to Didot → Bodoni 72 → Georgia → system serif. No FOUT
+     beyond `font-display: swap`.
+
+   Type stack:
+   - Display: Bodoni Moda (didone, high-contrast — for masthead, headlines)
+   - Body:    Source Serif 4 (warm humanist serif — for prose)
+   - CJK:     Noto Serif SC (pairs with Source Serif at the same x-height)
+   - Mono:    JetBrains Mono (data values, tickers, dates)
+
+   Palette philosophy:
+   - Warm aged parchment in light mode; midnight library in dark mode.
+   - Single dominant tone (paper) + sharp warm accents (oxblood, gold).
+   - No blue, no neon, no Stripe-purple gradients.
+   =========================================================================== */
+
+/* Google Fonts via fonts.loli.net mirror — fonts.googleapis.com is blocked
+   inside the GFW (Ray's typical environment). The mirror serves the same
+   CSS payload at the same URL paths. If even the mirror fails, the
+   font-family fallback chains (Bodoni Moda → Didot → Bodoni 72 → Georgia;
+   Source Serif → Noto Serif SC → Source Han Serif → Georgia) cover it.
+   font-display: swap keeps paint unblocked regardless. */
+@import url('https://fonts.loli.net/css2?family=Bodoni+Moda:ital,opsz,wght@0,6..96,500;0,6..96,700;0,6..96,900;1,6..96,500;1,6..96,700&family=Source+Serif+4:ital,opsz,wght@0,8..60,400;0,8..60,500;0,8..60,600;0,8..60,700;1,8..60,400;1,8..60,600&family=Noto+Serif+SC:wght@400;500;700;900&family=JetBrains+Mono:wght@400;500;700&display=swap');
+
+/* ---------------------------------------------------------------------------
+   Tokens — light mode (default: broadsheet)
+   --------------------------------------------------------------------------- */
+:root {
+    /* paper / ink */
+    --paper:        #f1e9d6;   /* aged parchment */
+    --paper-deep:   #e6dcc1;   /* card / inset background */
+    --paper-rule:   #d4c79f;   /* fine column rules, dividers */
+    --ink:          #1d1814;   /* warm near-black for headlines */
+    --ink-soft:     #4a3f33;   /* body text */
+    --ink-faint:    #8a7e6a;   /* dateline, captions, footnotes */
+
+    /* accents — sparing, intentional */
+    --oxblood:      #7a1e1e;   /* FAIL / AVOID, headline accent */
+    --rust:         #b8521e;   /* secondary highlight, links on hover */
+    --gold:         #b89c4e;   /* annotations, stamps, focus ring */
+    --moss:         #5b6b3a;   /* PASS, BUY */
+    --bone:         #d4c79f;   /* subtle dividers (= paper-rule alias) */
+
+    /* type */
+    --font-display: 'Bodoni Moda', 'Didot', 'Bodoni 72', 'STIX Two Text', Georgia, serif;
+    --font-body:    'Source Serif 4', 'Noto Serif SC', 'Source Han Serif SC', Georgia, serif;
+    --font-cjk:     'Noto Serif SC', 'Source Han Serif SC', 'Songti SC', STSong, serif;
+    --font-mono:    'JetBrains Mono', 'SF Mono', Menlo, Consolas, monospace;
+
+    /* prose-audit shims — keeps existing audit-report rendering aligned */
+    --prose-heading:  var(--ink);
+    --prose-border:   var(--paper-rule);
+    --prose-th-bg:    var(--paper-deep);
+    --prose-code-bg:  var(--paper-deep);
+    --prose-pre-bg:   var(--paper-deep);
+    --prose-quote-text: var(--ink-soft);
+}
+
+/* ---------------------------------------------------------------------------
+   Tokens — dark mode (midnight library)
+   --------------------------------------------------------------------------- */
+html.dark {
+    --paper:        #15110d;
+    --paper-deep:   #1d1814;
+    --paper-rule:   #2a2218;
+    --ink:          #f1e9d6;
+    --ink-soft:     #c4b89d;
+    --ink-faint:    #786a55;
+
+    /* on dark, oxblood reads weak; shift toward rust for legibility */
+    --oxblood:      #d77a3a;
+    --rust:         #e89752;
+    --gold:         #d4af6c;
+    --moss:         #9bb16c;
+    --bone:         #2a2218;
+
+    --prose-heading:  var(--ink-soft);
+    --prose-border:   var(--paper-rule);
+    --prose-th-bg:    var(--paper-deep);
+    --prose-code-bg:  var(--paper-deep);
+    --prose-pre-bg:   var(--paper-deep);
+    --prose-quote-text: var(--ink-soft);
+}
+
+/* ---------------------------------------------------------------------------
+   Reset & base
+   --------------------------------------------------------------------------- */
+html { background: var(--paper); }
+body {
+    margin: 0;
+    background: var(--paper);
+    color: var(--ink-soft);
+    font-family: var(--font-body);
+    font-size: 16.5px;
+    line-height: 1.55;
+    font-feature-settings: 'liga' 1, 'kern' 1, 'onum' 1, 'ss01' 1;
+
+    /* Subtle paper grain — SVG noise filter, no extra HTTP request. */
+    background-image:
+        url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='220' height='220'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 0 0.035 0'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>");
+    background-size: 220px 220px;
+    transition: background-color 200ms ease, color 200ms ease;
+}
+html.dark body {
+    background-image:
+        url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='220' height='220'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 1  0 0 0 0 0.95  0 0 0 0 0.85  0 0 0 0.025 0'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>");
+}
+
+::selection { background: var(--gold); color: var(--ink); }
+
+/* CJK runs use Noto Serif SC; Latin in same paragraph stays Source Serif.
+   Browsers pick per-glyph based on the unicode-range Google Fonts ships. */
+
+/* ---------------------------------------------------------------------------
+   Editorial type — display, headlines, body
+   --------------------------------------------------------------------------- */
+h1, h2, h3, h4, .display {
+    font-family: var(--font-display);
+    color: var(--ink);
+    font-weight: 700;
+    letter-spacing: -0.005em;
+    line-height: 1.05;
+}
+h1, .display-xl {
+    font-size: clamp(2.4rem, 5vw, 4.4rem);
+    font-weight: 900;
+    letter-spacing: -0.02em;
+}
+h2, .display-lg { font-size: clamp(1.75rem, 3vw, 2.4rem); font-weight: 700; }
+h3, .display-md { font-size: 1.35rem; font-weight: 600; line-height: 1.2; }
+
+/* Italic on the display family is the proper way to draw the eye, not bold. */
+.display-italic { font-style: italic; font-weight: 500; }
+
+/* Small caps + tracking — broadsheet section labels and dateline. */
+.dateline,
+.section-label {
+    font-family: var(--font-display);
+    font-variant: small-caps;
+    letter-spacing: 0.18em;
+    font-weight: 600;
+    font-size: 0.72rem;
+    color: var(--ink-faint);
+    text-transform: lowercase;  /* small-caps takes over */
+}
+
+/* Body prose — taller line-height for reading. */
+.prose-edit {
+    color: var(--ink-soft);
+    font-size: 1rem;
+    line-height: 1.7;
+    max-width: 38em;
+}
+.prose-edit p + p { text-indent: 1.4em; margin-top: 0; }
+
+/* Drop cap — only on the first paragraph of a major section. */
+.drop-cap::first-letter {
+    font-family: var(--font-display);
+    font-weight: 900;
+    font-size: 4.4em;
+    line-height: 0.85;
+    float: left;
+    padding: 0.15rem 0.55rem 0 0;
+    color: var(--ink);
+}
+
+/* Mono — tickers, dates, numerical values. */
+.mono, code, kbd, samp {
+    font-family: var(--font-mono);
+    font-feature-settings: 'liga' 0, 'calt' 0, 'tnum' 1;
+    font-size: 0.92em;
+    letter-spacing: -0.01em;
+}
+
+/* Pull quote — Bodoni italic, oversized hanging quote mark. */
+blockquote.pull,
+.pull-quote {
+    font-family: var(--font-display);
+    font-style: italic;
+    font-weight: 500;
+    font-size: clamp(1.25rem, 2vw, 1.6rem);
+    line-height: 1.35;
+    color: var(--ink);
+    border-left: none;
+    margin: 1.5rem 0;
+    padding-left: 0;
+    position: relative;
+}
+.pull-quote::before {
+    content: "“";
+    font-size: 3.5em;
+    line-height: 0.6;
+    position: absolute;
+    top: 0.15em;
+    left: -0.55em;
+    color: var(--gold);
+    font-style: normal;
+    font-weight: 900;
+}
+.pull-quote cite {
+    display: block;
+    margin-top: 0.7rem;
+    font-style: normal;
+    font-family: var(--font-body);
+    font-size: 0.82rem;
+    color: var(--ink-faint);
+}
+.pull-quote cite::before { content: "— "; }
+
+/* ---------------------------------------------------------------------------
+   Masthead — broadsheet title strip with rules and dateline
+   --------------------------------------------------------------------------- */
+.masthead {
+    border-top: 4px double var(--ink);
+    border-bottom: 1px solid var(--ink);
+    padding: 0.5rem 0 0.55rem;
+    background: transparent;
+    position: relative;
+}
+.masthead::after {
+    content: "";
+    position: absolute;
+    left: 0; right: 0;
+    bottom: -5px;
+    height: 1px;
+    background: var(--ink);
+}
+.masthead-title {
+    font-family: var(--font-display);
+    font-weight: 900;
+    font-size: clamp(1.6rem, 2.6vw, 2.2rem);
+    color: var(--ink);
+    letter-spacing: -0.02em;
+    line-height: 1;
+}
+.masthead-title .lozenge {
+    color: var(--oxblood);
+    font-style: italic;
+    font-weight: 700;
+    margin-right: 0.15em;
+}
+.masthead-tag {
+    font-family: var(--font-display);
+    font-style: italic;
+    font-weight: 500;
+    color: var(--ink-soft);
+    font-size: 0.95rem;
+}
+
+/* Nav links inside masthead — small caps, rule between, no underline. */
+.masthead-nav { display: flex; gap: 0; align-items: center; }
+.masthead-nav a {
+    font-family: var(--font-display);
+    font-variant: small-caps;
+    letter-spacing: 0.12em;
+    font-size: 0.78rem;
+    font-weight: 600;
+    color: var(--ink-soft);
+    padding: 0.25rem 0.85rem;
+    border-right: 1px solid var(--paper-rule);
+    text-decoration: none;
+    transition: color 120ms ease;
+}
+.masthead-nav a:last-child { border-right: none; }
+.masthead-nav a:hover,
+.masthead-nav a:focus-visible { color: var(--oxblood); }
+html.dark .masthead-nav a:hover,
+html.dark .masthead-nav a:focus-visible { color: var(--rust); }
+
+/* Theme toggle — styled like a stamped icon, not a button. */
+.theme-toggle {
+    background: transparent;
+    border: 1px solid var(--paper-rule);
+    border-radius: 999px;
+    padding: 0.3rem 0.6rem;
+    color: var(--ink-soft);
+    cursor: pointer;
+    transition: all 120ms ease;
+    font-family: var(--font-mono);
+    font-size: 0.7rem;
+    letter-spacing: 0.05em;
+}
+.theme-toggle:hover { border-color: var(--gold); color: var(--gold); }
+
+/* ---------------------------------------------------------------------------
+   Verdict stamps — circular SVG seals (PASS / FAIL / SKIP / BUY / AVOID)
+   --------------------------------------------------------------------------- */
+.stamp {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 5.2rem;
+    height: 5.2rem;
+    border-radius: 50%;
+    border: 2.5px solid currentColor;
+    font-family: var(--font-display);
+    font-weight: 900;
+    font-size: 0.95rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    transform: rotate(-6deg);
+    position: relative;
+    /* Inner ring */
+    box-shadow: inset 0 0 0 1px currentColor;
+    background: transparent;
+}
+.stamp::before,
+.stamp::after {
+    content: "";
+    position: absolute;
+    border: 1px solid currentColor;
+    border-radius: 50%;
+    opacity: 0.55;
+}
+.stamp::before { inset: 4px; }
+.stamp::after  { inset: 9px; border-style: dashed; }
+.stamp.pass    { color: var(--moss); }
+.stamp.fail,
+.stamp.avoid   { color: var(--oxblood); }
+.stamp.skip    { color: var(--ink-faint); }
+.stamp.buy     { color: var(--moss); }
+.stamp.watch   { color: var(--gold); }
+.stamp.hold    { color: var(--ink-soft); }
+
+/* Compact inline stamp variant for table rows. */
+.stamp-inline {
+    display: inline-block;
+    padding: 0.08rem 0.55rem;
+    border: 1.5px solid currentColor;
+    border-radius: 999px;
+    font-family: var(--font-display);
+    font-weight: 700;
+    font-size: 0.7rem;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+}
+.stamp-inline.pass  { color: var(--moss); }
+.stamp-inline.fail  { color: var(--oxblood); }
+.stamp-inline.skip  { color: var(--ink-faint); }
+.stamp-inline.buy   { color: var(--moss); }
+.stamp-inline.avoid { color: var(--oxblood); }
+.stamp-inline.watch { color: var(--gold); }
+
+/* ---------------------------------------------------------------------------
+   Margin annotation — "Munger's pencil in the margin"
+   --------------------------------------------------------------------------- */
+.margin-note {
+    font-family: var(--font-body);
+    font-style: italic;
+    font-size: 0.85rem;
+    color: var(--ink-soft);
+    border-left: 2px solid var(--gold);
+    padding: 0.1rem 0 0.1rem 0.85rem;
+    margin: 0.35rem 0;
+    line-height: 1.45;
+}
+.margin-note .label {
+    display: block;
+    font-style: normal;
+    font-variant: small-caps;
+    letter-spacing: 0.14em;
+    font-size: 0.66rem;
+    color: var(--gold);
+    margin-bottom: 0.15rem;
+}
+
+/* ---------------------------------------------------------------------------
+   Broadsheet card — for the home-page mode tiles
+   --------------------------------------------------------------------------- */
+.bs-card {
+    background: transparent;
+    border: none;
+    border-top: 1px solid var(--paper-rule);
+    padding: 1.5rem 1.4rem 1.25rem;
+    position: relative;
+    transition: background 200ms ease;
+}
+.bs-card:first-child { border-top: 2px solid var(--ink); }
+@media (min-width: 768px) {
+    .bs-card {
+        border-top: none;
+        border-left: 1px solid var(--paper-rule);
+        padding: 0.25rem 1.4rem 0.5rem;
+    }
+    .bs-card:first-child { border-left: none; padding-left: 0; }
+    .bs-card:last-child  { padding-right: 0; }
+}
+.bs-card .kicker {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    margin-bottom: 0.55rem;
+}
+.bs-card .kicker .num {
+    font-family: var(--font-display);
+    font-weight: 900;
+    font-style: italic;
+    color: var(--oxblood);
+    font-size: 1.4rem;
+    line-height: 1;
+}
+.bs-card h2 {
+    font-family: var(--font-display);
+    font-size: 1.45rem;
+    font-weight: 700;
+    margin-bottom: 0.45rem;
+    color: var(--ink);
+    line-height: 1.15;
+}
+.bs-card p.lede {
+    color: var(--ink-soft);
+    font-size: 0.96rem;
+    line-height: 1.55;
+    margin-bottom: 1rem;
+}
+
+/* Form rows inside cards — input + button as a unified specimen line. */
+.bs-input {
+    flex: 1;
+    background: var(--paper-deep);
+    border: 1px solid var(--paper-rule);
+    border-radius: 0;
+    padding: 0.6rem 0.75rem;
+    color: var(--ink);
+    font-family: var(--font-mono);
+    font-size: 0.92rem;
+    transition: border-color 120ms ease;
+}
+.bs-input::placeholder {
+    color: var(--ink-faint);
+    font-style: italic;
+    font-family: var(--font-body);
+}
+.bs-input:focus {
+    border-color: var(--ink);
+    outline: none;
+    background: var(--paper);
+}
+
+.bs-button {
+    background: var(--ink);
+    color: var(--paper);
+    font-family: var(--font-display);
+    font-weight: 700;
+    font-variant: small-caps;
+    letter-spacing: 0.14em;
+    font-size: 0.85rem;
+    padding: 0.6rem 1.1rem;
+    border: none;
+    border-radius: 0;
+    cursor: pointer;
+    transition: all 120ms ease;
+}
+.bs-button:hover { background: var(--oxblood); }
+
+.bs-button-ghost {
+    background: transparent;
+    color: var(--ink);
+    border: 1.5px solid var(--ink);
+    font-family: var(--font-display);
+    font-weight: 600;
+    font-variant: small-caps;
+    letter-spacing: 0.14em;
+    font-size: 0.85rem;
+    padding: 0.55rem 1.1rem;
+    border-radius: 0;
+    cursor: pointer;
+    text-decoration: none;
+    display: inline-block;
+    transition: all 120ms ease;
+}
+.bs-button-ghost:hover {
+    background: var(--ink);
+    color: var(--paper);
+}
+
+/* Small example chips under inputs — thin rule, italic. */
+.examples {
+    margin-top: 0.6rem;
+    font-size: 0.78rem;
+    color: var(--ink-faint);
+    font-style: italic;
+}
+.examples button {
+    background: none;
+    border: none;
+    padding: 0;
+    margin: 0 0.2em;
+    color: var(--rust);
+    font-style: italic;
+    cursor: pointer;
+    font-family: var(--font-body);
+    font-size: inherit;
+    text-decoration: underline;
+    text-decoration-style: dotted;
+    text-underline-offset: 3px;
+}
+.examples button:hover { color: var(--oxblood); }
+
+/* Focus state on the radiogroup card itself — gold underline, not a glow. */
+.bs-card:focus-within { background: var(--paper-deep); }
+.bs-card[role="radio"]:focus-visible {
+    outline: none;
+    box-shadow: inset 4px 0 0 var(--gold);
+}
+
+/* ---------------------------------------------------------------------------
+   Lead — the front-page hero block above the three modes
+   --------------------------------------------------------------------------- */
+.lead {
+    padding: 2.5rem 0 1.75rem;
+    text-align: left;
+    border-bottom: 1px solid var(--paper-rule);
+    margin-bottom: 1.25rem;
+    position: relative;
+}
+.lead .edition {
+    font-variant: small-caps;
+    letter-spacing: 0.22em;
+    font-size: 0.7rem;
+    color: var(--ink-faint);
+    margin-bottom: 0.85rem;
+    display: flex;
+    gap: 1.25rem;
+    align-items: center;
+}
+.lead .edition .dot {
+    width: 4px; height: 4px;
+    border-radius: 50%;
+    background: var(--gold);
+    display: inline-block;
+}
+.lead .headline {
+    font-family: var(--font-display);
+    font-size: clamp(2.6rem, 6vw, 5rem);
+    font-weight: 900;
+    line-height: 0.96;
+    letter-spacing: -0.025em;
+    color: var(--ink);
+    margin: 0 0 0.55rem;
+}
+.lead .headline em {
+    font-style: italic;
+    font-weight: 500;
+    color: var(--oxblood);
+}
+.lead .subhead {
+    font-family: var(--font-display);
+    font-style: italic;
+    font-weight: 500;
+    color: var(--ink-soft);
+    font-size: clamp(1.05rem, 1.6vw, 1.3rem);
+    line-height: 1.4;
+    max-width: 42em;
+}
+
+/* ---------------------------------------------------------------------------
+   Section rule — broadsheet-style decorative divider
+   --------------------------------------------------------------------------- */
+.rule-fancy {
+    display: flex;
+    align-items: center;
+    gap: 0.85rem;
+    color: var(--ink-faint);
+    margin: 2rem 0 1rem;
+}
+.rule-fancy::before,
+.rule-fancy::after {
+    content: "";
+    flex: 1;
+    height: 1px;
+    background: var(--paper-rule);
+}
+.rule-fancy .ornament {
+    font-family: var(--font-display);
+    font-size: 1.1rem;
+    color: var(--gold);
+    line-height: 1;
+}
+
+/* ---------------------------------------------------------------------------
+   Recent items — editorial sidebar list
+   --------------------------------------------------------------------------- */
+.recent-list a {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    padding: 0.45rem 0;
+    border-bottom: 1px dotted var(--paper-rule);
+    text-decoration: none;
+    color: var(--ink-soft);
+    transition: color 120ms ease;
+}
+.recent-list a:hover { color: var(--oxblood); }
+.recent-list a:last-child { border-bottom: none; }
+.recent-list .ticker {
+    font-family: var(--font-mono);
+    font-weight: 500;
+    color: var(--ink);
+    font-size: 0.92rem;
+}
+.recent-list .meta {
+    font-size: 0.78rem;
+    color: var(--ink-faint);
+    font-style: italic;
+}
+
+/* ---------------------------------------------------------------------------
+   Alerts — folded-corner notice
+   --------------------------------------------------------------------------- */
+.notice {
+    background: var(--paper-deep);
+    border-left: 3px solid var(--oxblood);
+    padding: 0.85rem 1rem;
+    margin: 1rem 0;
+    color: var(--ink);
+    font-size: 0.92rem;
+    position: relative;
+}
+.notice strong { color: var(--oxblood); }
+.notice code {
+    background: var(--paper);
+    border: 1px solid var(--paper-rule);
+    padding: 0.05rem 0.35rem;
+}
+
+/* ---------------------------------------------------------------------------
+   Footer — colophon
+   --------------------------------------------------------------------------- */
+.colophon {
+    border-top: 4px double var(--ink);
+    margin-top: 4rem;
+    padding: 1.5rem 0 2rem;
+    font-family: var(--font-display);
+    font-style: italic;
+    font-size: 0.85rem;
+    color: var(--ink-faint);
+    text-align: center;
+    line-height: 1.5;
+}
+.colophon .ornament {
+    font-style: normal;
+    font-weight: 900;
+    color: var(--gold);
+    margin: 0 0.45rem;
+}
+.colophon a { color: var(--ink-soft); text-decoration: underline; text-decoration-style: dotted; text-underline-offset: 3px; }
+
+/* ---------------------------------------------------------------------------
+   Tailwind palette overrides — keep utility classes working with editorial tones
+   --------------------------------------------------------------------------- */
+body.bg-ink-900,
+.bg-ink-900 { background-color: var(--paper) !important; }
+.bg-ink-800 { background-color: var(--paper-deep) !important; }
+.bg-ink-700 { background-color: var(--paper-rule) !important; }
+.border-ink-700 { border-color: var(--paper-rule) !important; }
+.border-ink-600 { border-color: var(--ink-faint) !important; }
+.text-gray-100 { color: var(--ink) !important; }
+.text-gray-200 { color: var(--ink) !important; }
+.text-gray-300 { color: var(--ink-soft) !important; }
+.text-gray-400 { color: var(--ink-soft) !important; }
+.text-gray-500 { color: var(--ink-faint) !important; }
+.text-gold     { color: var(--gold) !important; }
+.bg-gold       { background-color: var(--gold) !important; }
+.text-green-400 { color: var(--moss) !important; }
+.text-red-400,
+.text-red-200  { color: var(--oxblood) !important; }
+
+/* Existing prose-audit class stays valid with new tokens via the shims above. */
+.prose-audit h1,
+.prose-audit h2,
+.prose-audit h3 { font-family: var(--font-display); color: var(--ink); }
+.prose-audit p,
+.prose-audit li { color: var(--ink-soft); }
+.prose-audit blockquote {
+    border-left: 3px solid var(--gold);
+    background: var(--paper-deep);
+    font-family: var(--font-display);
+    font-style: italic;
+    color: var(--ink);
+}
+
+/* ---------------------------------------------------------------------------
+   Focus ring — gold rule, not a glow
+   --------------------------------------------------------------------------- */
+*:focus-visible {
+    outline: 2px solid var(--gold);
+    outline-offset: 3px;
+    border-radius: 1px;
+}
+
+/* ---------------------------------------------------------------------------
+   Motion — one orchestrated load reveal, no scattered micro-interactions
+   --------------------------------------------------------------------------- */
+@keyframes editorial-rise {
+    from { opacity: 0; transform: translateY(8px); }
+    to   { opacity: 1; transform: none; }
+}
+.reveal { animation: editorial-rise 600ms cubic-bezier(0.2, 0.7, 0.2, 1) both; }
+.reveal-1 { animation-delay: 80ms; }
+.reveal-2 { animation-delay: 200ms; }
+.reveal-3 { animation-delay: 320ms; }
+.reveal-4 { animation-delay: 440ms; }
+.reveal-5 { animation-delay: 560ms; }
+
+@media (prefers-reduced-motion: reduce) {
+    .reveal { animation: none; }
+}
+
+/* ---------------------------------------------------------------------------
+   Print — make the broadsheet actually print well
+   --------------------------------------------------------------------------- */
+@media print {
+    html, body { background: white !important; color: black !important; }
+    .masthead-nav, .theme-toggle, .bs-button, form { display: none !important; }
+    a { color: black !important; text-decoration: none !important; }
+}
