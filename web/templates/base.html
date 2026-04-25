@@ -5,21 +5,11 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{% block title %}Moatlens — Buffett/Munger lens{% endblock %}</title>
     <script src="/static/js/theme.js"></script>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <script>
-        tailwind.config = {
-            darkMode: 'class',
-            theme: {
-                extend: {
-                    colors: {
-                        ink:  {900: '#0a0e1a', 800: '#12172a', 700: '#1e2541', 600: '#293354'},
-                        paper: {50: '#fafafa', 100: '#f4f4f5', 200: '#e4e4e7', 300: '#d4d4d8'},
-                        gold: '#d4af37',
-                    }
-                }
-            }
-        }
-    </script>
+    {# P1-1 (round-2 audit): served as a precompiled CSS file, not the
+       Play CDN runtime JIT. `bin/build-css.sh` regenerates this from the
+       same tailwind.config.js whenever a new utility class is introduced.
+       Saves ~400 KB / ~300 ms first-paint over Tailscale vs the Play CDN. #}
+    <link rel="stylesheet" href="/static/css/tailwind.min.css">
     <style>
         body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif; }
 
