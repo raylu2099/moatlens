@@ -9,6 +9,7 @@ the user's own API quota.
 Public market data (financials, prices, macro) → shared cache.
 Claude analyses and Perplexity searches → NOT cached (user-specific).
 """
+
 from __future__ import annotations
 
 import hashlib
@@ -61,4 +62,37 @@ def cache_clear(cfg: Config, namespace: str | None = None) -> int:
     for p in root.rglob("*.json"):
         p.unlink()
         count += 1
+    return count
+
+
+def cache_clear_stale(cfg: Config, max_age_seconds: int = 30 * 86400) -> int:
+    """Delete cache entries whose `stored_at` is older than `max_age_seconds`.
+
+    Called by `bin/nightly.sh` to cap cache disk footprint. The default 30 days
+    is deliberately looser than any individual namespace TTL (longest is 24h
+    for macro) so this job never surprises the running app by deleting a
+    still-fresh entry — it only evicts obviously abandoned ones.
+
+    Namespace TTLs already make stale reads return None, so this job is
+    about bounded disk growth, not correctness.
+    """
+    root = cfg.cache_dir
+    if not root.exists():
+        return 0
+    now = time.time()
+    count = 0
+    for p in root.rglob("*.json"):
+        try:
+            entry = json.loads(p.read_text(encoding="utf-8"))
+            stored = entry.get("stored_at", 0)
+            if now - stored > max_age_seconds:
+                p.unlink()
+                count += 1
+        except Exception:
+            # Corrupt cache file — just delete it
+            try:
+                p.unlink()
+                count += 1
+            except OSError:
+                pass
     return count

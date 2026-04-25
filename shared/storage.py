@@ -10,18 +10,18 @@ The index lets list_audits() return in O(1) reads instead of O(N) full JSON pars
 It's a cache — if it goes missing or stale, list_audits() falls back to a full scan
 and rebuilds it. You can always delete the index to force a rebuild.
 """
+
 from __future__ import annotations
 
 import fcntl
 import json
 import os
 from contextlib import contextmanager
-from datetime import date, datetime
+from datetime import date
 from pathlib import Path
 
 from engine.models import AuditReport
 from shared.config import Config
-
 
 INDEX_FILENAME = "_index.json"
 
@@ -79,7 +79,9 @@ def _row_from_report(report: AuditReport, md_path: Path, json_path: Path) -> dic
 
 
 def save_audit(
-    cfg: Config, report: AuditReport, markdown: str,
+    cfg: Config,
+    report: AuditReport,
+    markdown: str,
 ) -> tuple[Path, Path]:
     base = audits_dir(cfg, report.ticker) / report.audit_date
     json_path = base.with_suffix(".json")
@@ -134,15 +136,17 @@ def _full_scan(cfg: Config) -> list[dict]:
                 data = json.loads(json_file.read_text(encoding="utf-8"))
             except Exception:
                 continue
-            rows.append({
-                "ticker": ticker_dir.name,
-                "audit_date": date_str,
-                "action": data.get("overall_action") or "",
-                "confidence": data.get("overall_confidence") or "",
-                "total_cost_usd": float(data.get("total_api_cost_usd") or 0),
-                "md_path": str(md_path),
-                "json_path": str(json_file),
-            })
+            rows.append(
+                {
+                    "ticker": ticker_dir.name,
+                    "audit_date": date_str,
+                    "action": data.get("overall_action") or "",
+                    "confidence": data.get("overall_confidence") or "",
+                    "total_cost_usd": float(data.get("total_api_cost_usd") or 0),
+                    "md_path": str(md_path),
+                    "json_path": str(json_file),
+                }
+            )
     rows.sort(key=lambda r: r["audit_date"], reverse=True)
     return rows
 
@@ -173,8 +177,41 @@ def _decorate_age(rows: list[dict]) -> list[dict]:
     return out
 
 
+def _any_ticker_dir_changed_after(root: Path, after_mtime: float) -> bool:
+    """Return True if any ticker-level subdirectory under `root` was modified
+    after `after_mtime`. Directory mtimes update when entries are added or
+    removed inside them — so "some JSON file appeared or disappeared" maps
+    to "some ticker dir's mtime moved forward."
+
+    O(number_of_ticker_dirs) stat calls — typically <50, independent of the
+    number of audits. Compare against O(audits) calls if we stat every
+    indexed row.
+    """
+    try:
+        for entry in root.iterdir():
+            if not entry.is_dir():
+                continue
+            try:
+                if entry.stat().st_mtime > after_mtime:
+                    return True
+            except OSError:
+                return True  # entry vanished mid-iter → something changed
+    except OSError:
+        return True
+    return False
+
+
 def list_audits(cfg: Config) -> list[dict]:
-    """Return newest-first [{ticker, audit_date, action, confidence, total_cost_usd, age_days, stale_level, ...}, ...]."""
+    """Return newest-first [{ticker, audit_date, action, confidence, total_cost_usd, age_days, stale_level, ...}, ...].
+
+    Round-2 audit P0-8: was doing `Path.exists()` on every indexed row on every
+    call — 1000 stats per /history render once the portfolio accumulates a
+    year of audits. Now: compare ticker-directory mtimes against index mtime.
+    If no ticker dir was touched after the index was written, nothing could
+    have been added or deleted, so the index is trustworthy — skip the per-row
+    validation. Still catches hand-deleted JSONs on the next call because the
+    deletion bumps the parent ticker-dir's mtime.
+    """
     root = audits_root(cfg)
     if not root.exists():
         return []
@@ -182,10 +219,16 @@ def list_audits(cfg: Config) -> list[dict]:
     if not rows:
         rows = rebuild_index(cfg)
     else:
-        # Sanity: index should not claim a json that was deleted.
-        valid = [r for r in rows if Path(r.get("json_path", "")).exists()]
-        if len(valid) != len(rows):
-            rows = rebuild_index(cfg)
+        idx_path = _index_path(cfg)
+        try:
+            idx_mtime = idx_path.stat().st_mtime
+        except OSError:
+            idx_mtime = 0.0
+        if _any_ticker_dir_changed_after(root, idx_mtime):
+            # Something changed on disk after the index was written — revalidate.
+            valid = [r for r in rows if Path(r.get("json_path", "")).exists()]
+            if len(valid) != len(rows):
+                rows = rebuild_index(cfg)
     return _decorate_age(rows)
 
 
@@ -197,7 +240,8 @@ def list_audit_dates_for_ticker(cfg: Config, ticker: str) -> list[str]:
 
 
 def load_last_two_audits(
-    cfg: Config, ticker: str,
+    cfg: Config,
+    ticker: str,
 ) -> tuple[AuditReport | None, AuditReport | None]:
     """Return (current, previous) — previous is None if only one audit exists."""
     dates = list_audit_dates_for_ticker(cfg, ticker)

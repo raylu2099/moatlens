@@ -30,7 +30,11 @@ if [ -n "${YESTERDAY}" ] && [ -d "${DST}/${YESTERDAY}" ]; then
 fi
 
 # Back up data/, .env, prompts/, logs/ — everything needed for full restore.
-# Cache is excluded (rebuildable); .git is excluded (GitHub is source of truth).
+# Cache excluded: rebuildable, grows to ~500 MB, and bin/nightly.sh already
+# prunes stale entries on a separate schedule, so backing it up doubles the
+# effective disk footprint with zero recovery value. Cache misses after a
+# restore cost one extra provider call per ticker — acceptable.
+# .git also implicitly excluded (GitHub is source of truth).
 rsync -a --delete ${LINK_DEST_ARG} \
     --include='data/' --include='data/**' \
     --include='prompts/' --include='prompts/**' \

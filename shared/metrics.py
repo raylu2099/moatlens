@@ -25,7 +25,7 @@ Designed to be safe under concurrent writes (append-only, no rewrite).
 from __future__ import annotations
 
 import json
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 from shared.config import Config
@@ -108,3 +108,61 @@ def today_cost_utc(cfg: Config) -> float:
     how cost.jsonl timestamps are stored."""
     today_iso = datetime.now(UTC).strftime("%Y-%m-%dT00:00:00+00:00")
     return total_cost(cfg, since_iso=today_iso)
+
+
+def archive_cost_log(cfg: Config, keep_days: int = 90) -> tuple[int, int]:
+    """Move entries older than `keep_days` from cost.jsonl to a monthly
+    archive (`cost-<YYYY-MM>.jsonl`) under `data/metrics/archive/`.
+
+    Append-only growth on cost.jsonl is slow but monotonic; after a few
+    years `total_cost()` becomes O(N) drag on every audit's budget check.
+    This helper keeps the live file trimmed to the rolling 90-day window
+    while preserving full history in archives.
+
+    Returns (entries_archived, entries_kept). Safe to call from cron;
+    uses a tempfile + atomic rename for the trimmed live file so a mid-
+    run crash can't corrupt the budget view.
+    """
+    p = cost_log_path(cfg)
+    if not p.exists():
+        return 0, 0
+    cutoff = (datetime.now(UTC) - timedelta(days=keep_days)).isoformat()
+
+    kept: list[str] = []
+    by_month: dict[str, list[str]] = {}
+    for line in p.read_text(encoding="utf-8").splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            e = json.loads(line)
+            ts = e.get("ts") or ""
+        except Exception:
+            # Keep malformed lines in the live file rather than losing them
+            kept.append(line)
+            continue
+        if ts >= cutoff:
+            kept.append(line)
+        else:
+            month = ts[:7] if len(ts) >= 7 else "unknown"
+            by_month.setdefault(month, []).append(line)
+
+    if not by_month:
+        return 0, len(kept)
+
+    # Write archives
+    archive_dir = metrics_dir(cfg) / "archive"
+    archive_dir.mkdir(parents=True, exist_ok=True)
+    archived = 0
+    for month, lines in by_month.items():
+        apath = archive_dir / f"cost-{month}.jsonl"
+        with apath.open("a", encoding="utf-8") as f:
+            for line in lines:
+                f.write(line + "\n")
+                archived += 1
+
+    # Atomically replace the live log with just the kept-window entries
+    tmp = p.with_suffix(p.suffix + ".tmp")
+    tmp.write_text("\n".join(kept) + ("\n" if kept else ""), encoding="utf-8")
+    tmp.replace(p)
+    return archived, len(kept)
