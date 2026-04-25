@@ -1,10 +1,12 @@
 """Guardrails for Claude JSON outputs."""
+
 from __future__ import annotations
 
 from engine.guardrails import (
-    _extract_json_blob, parse_claude_json,
-    MoatAnalysis, ManagementAnalysis, InversionAnalysis,
-    validate_moat, validate_management, validate_inversion,
+    _extract_json_blob,
+    validate_inversion,
+    validate_management,
+    validate_moat,
 )
 
 
@@ -58,9 +60,11 @@ def test_moat_completely_garbage_returns_empty():
 
 
 def test_management_happy_path():
-    text = '{"integrity_score": 18, "capital_allocation_score": 16, ' \
-           '"shareholder_orientation_score": 17, "buffett_verdict_cn": "值得信任", ' \
-           '"summary_cn": "x"}'
+    text = (
+        '{"integrity_score": 18, "capital_allocation_score": 16, '
+        '"shareholder_orientation_score": 17, "buffett_verdict_cn": "值得信任", '
+        '"summary_cn": "x"}'
+    )
     data, errors = validate_management(text)
     assert errors == []
     assert data["integrity_score"] == 18
@@ -81,3 +85,58 @@ def test_inversion_invalid_fm_probability():
     text = '{"failure_modes": [{"scenario": "A", "probability_pct": 500}]}'
     data, errors = validate_inversion(text)
     assert errors  # 500 > 100 — invalid
+
+
+# =========================================================================
+# R3-6: parse-error logging (post-mortem trail)
+# =========================================================================
+
+
+def test_parse_failure_writes_log_file(tmp_path, monkeypatch):
+    """When validation fails, a JSON file lands under
+    `<MOATLENS_DATA_DIR>/logs/claude-parse-errors/` with the raw text
+    and error list — gives us a forensics trail when sonnet drifts."""
+    monkeypatch.setenv("MOATLENS_DATA_DIR", str(tmp_path))
+
+    bad_text = "this is not json at all"
+    data, errors = validate_moat(bad_text)
+    assert data == {}
+    assert errors and "json_parse" in errors[0]
+
+    log_dir = tmp_path / "logs" / "claude-parse-errors"
+    assert log_dir.exists()
+    files = list(log_dir.glob("*.json"))
+    assert len(files) == 1
+    import json as _json
+
+    payload = _json.loads(files[0].read_text(encoding="utf-8"))
+    assert payload["schema"] == "MoatAnalysis"
+    assert payload["raw_text"] == bad_text
+    assert payload["errors"] == errors
+
+
+def test_partial_validation_failure_also_logged(tmp_path, monkeypatch):
+    """Even when partial recovery succeeds, the original errors should
+    be logged so we can diagnose schema drift over time."""
+    monkeypatch.setenv("MOATLENS_DATA_DIR", str(tmp_path))
+
+    # `total_score`: "high" is not coercible to int → ValidationError, partial recovery
+    text = '{"total_score": "high", "summary_cn": "ok"}'
+    data, errors = validate_moat(text)
+    assert errors  # validation captured the bad field
+
+    log_dir = tmp_path / "logs" / "claude-parse-errors"
+    files = list(log_dir.glob("*.json"))
+    assert len(files) == 1
+
+
+def test_happy_path_writes_no_log(tmp_path, monkeypatch):
+    """Successful parse must not produce a log file (would be noise)."""
+    monkeypatch.setenv("MOATLENS_DATA_DIR", str(tmp_path))
+
+    text = '{"total_score": 80, "summary_cn": "good"}'
+    data, errors = validate_moat(text)
+    assert errors == []
+
+    log_dir = tmp_path / "logs" / "claude-parse-errors"
+    assert not log_dir.exists() or list(log_dir.glob("*.json")) == []

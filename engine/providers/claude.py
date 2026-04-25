@@ -8,15 +8,15 @@ Two levels of invocation:
 Includes a small retry-with-backoff loop for transient failures (429/5xx/network).
 Tracks cost automatically from response usage.
 """
+
 from __future__ import annotations
 
 import sys
 import time
 
-from anthropic import Anthropic, APIError, APIStatusError, APITimeoutError
+from anthropic import Anthropic, APIStatusError, APITimeoutError
 
 from shared.config import ApiKeys, Config
-
 
 PRICING = {
     "claude-sonnet-4-5": {"input": 3.0, "output": 15.0},
@@ -69,7 +69,8 @@ def analyze(
 
     # Rate-limit guard — catches runaway loops before they punch through quotas
     try:
-        from shared.ratelimit import require_token, RateLimitExceeded
+        from shared.ratelimit import require_token
+
         require_token("claude")
     except ImportError:
         pass
@@ -84,11 +85,16 @@ def analyze(
     last_exc: Exception | None = None
     for attempt in range(max_retries + 1):
         try:
+            # R3-6: explicit timeout. The Anthropic SDK has a default but it
+            # varies by version — pinning here makes "stuck request" behavior
+            # predictable. 120s covers sonnet-4-x for our 4k-output prompts;
+            # combined with max_retries=2, total worst case is ~8 minutes.
             response = client.messages.create(
                 model=m,
                 max_tokens=max_tokens,
                 system=system_prompt,
                 messages=[{"role": "user", "content": user_prompt}],
+                timeout=120,
             )
             parts = [b.text for b in response.content if getattr(b, "type", "") == "text"]
             text = "\n".join(parts).strip()
@@ -98,9 +104,14 @@ def analyze(
             # Log metrics — never raises
             try:
                 from shared.metrics import log_cost
+
                 log_cost(
-                    cfg, provider="claude", model=m, cost_usd=cost,
-                    input_tok=usage.input_tokens, output_tok=usage.output_tokens,
+                    cfg,
+                    provider="claude",
+                    model=m,
+                    cost_usd=cost,
+                    input_tok=usage.input_tokens,
+                    output_tok=usage.output_tokens,
                     **(metrics_context or {}),
                 )
             except Exception:
@@ -112,7 +123,7 @@ def analyze(
             last_exc = e
             retryable = _is_retryable(e)
             if attempt < max_retries and retryable:
-                sleep_s = 1.5 ** attempt  # 1, 1.5, 2.25 ...
+                sleep_s = 1.5**attempt  # 1, 1.5, 2.25 ...
                 print(
                     f"[claude] attempt {attempt + 1} failed ({type(e).__name__}), "
                     f"retrying in {sleep_s:.1f}s",
@@ -136,8 +147,12 @@ def analyze_cheap(
     max_tokens: int = 2000,
 ) -> tuple[str, float]:
     return analyze(
-        cfg, keys, system_prompt, user_prompt,
-        model="claude-haiku-4-5", max_tokens=max_tokens,
+        cfg,
+        keys,
+        system_prompt,
+        user_prompt,
+        model="claude-haiku-4-5",
+        max_tokens=max_tokens,
     )
 
 
