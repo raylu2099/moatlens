@@ -29,6 +29,24 @@ STAGE_ID = 8
 STAGE_NAME = "反方论点 & Variant View"
 PROMPT_SLUG = "s8_inversion"
 
+# R3-4: token-based truncation. Anthropic's exact tokenizer requires a
+# network call; this heuristic (3 chars per token) is conservative for
+# English and slightly aggressive for CJK — fine because the 80k hard
+# cap is well below Claude's 200k context window.
+_CHARS_PER_TOKEN = 3
+_MAX_INPUT_TOKENS = 80_000  # safety ceiling on total user_prompt size
+
+
+def _est_tokens(s: str) -> int:
+    return len(s) // _CHARS_PER_TOKEN
+
+
+def _truncate_to_tokens(s: str, max_tokens: int) -> str:
+    limit_chars = max_tokens * _CHARS_PER_TOKEN
+    if len(s) <= limit_chars:
+        return s
+    return s[:limit_chars] + f"\n... [truncated, original ~{_est_tokens(s)} tokens]"
+
 
 _LEGACY_SYSTEM_PROMPT = """你是一位遵循 Charlie Munger "Invert, always invert" 思维的分析师。你的任务：
 
@@ -129,6 +147,26 @@ def run(
         )
         enrichment_raw["fda_pipeline"] = fda_raw
 
+    # R3-4: token-budgeted slices replace char-based [:2000]. Per-section caps
+    # roughly mirror prior char limits but framed in tokens so an English-heavy
+    # prior_stages_summary doesn't over-spend the prompt budget.
+    s3 = _truncate_to_tokens(
+        json.dumps(prior_stages_summary.get("stage3", {}), ensure_ascii=False, indent=2),
+        max_tokens=600,
+    )
+    s4 = _truncate_to_tokens(
+        json.dumps(prior_stages_summary.get("stage4", {}), ensure_ascii=False, indent=2),
+        max_tokens=400,
+    )
+    s6 = _truncate_to_tokens(
+        json.dumps(prior_stages_summary.get("stage6", {}), ensure_ascii=False, indent=2),
+        max_tokens=400,
+    )
+    s7 = _truncate_to_tokens(
+        json.dumps(prior_stages_summary.get("stage7", {}), ensure_ascii=False, indent=2),
+        max_tokens=400,
+    )
+
     user_prompt = f"""# 审视对象
 Ticker: {ticker}
 
@@ -138,18 +176,23 @@ Ticker: {ticker}
 # 前面 7 阶段的判断摘要
 
 ## Stage 3 护城河（摘要）
-{json.dumps(prior_stages_summary.get('stage3', {}), ensure_ascii=False, indent=2)[:2000]}
+{s3}
 
 ## Stage 4 管理层（摘要）
-{json.dumps(prior_stages_summary.get('stage4', {}), ensure_ascii=False, indent=2)[:1500]}
+{s4}
 
 ## Stage 6 估值（摘要）
-{json.dumps(prior_stages_summary.get('stage6', {}), ensure_ascii=False, indent=2)[:1500]}
+{s6}
 
 ## Stage 7 安全边际（摘要）
-{json.dumps(prior_stages_summary.get('stage7', {}), ensure_ascii=False, indent=2)[:1500]}
+{s7}
 {enrichment_block}
 请严格按系统提示词的 JSON 格式输出。"""
+
+    # Final hard ceiling — protects against an unforeseen path where prior
+    # stages produce massive raw_data that bypasses the per-section caps.
+    if _est_tokens(user_prompt) > _MAX_INPUT_TOKENS:
+        user_prompt = _truncate_to_tokens(user_prompt, _MAX_INPUT_TOKENS)
 
     claude_output, cost = p_claude.analyze(
         cfg,
