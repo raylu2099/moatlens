@@ -29,10 +29,12 @@ from __future__ import annotations
 
 import asyncio
 import json
+import os
 import re
+import shutil
 import sys
 from contextlib import asynccontextmanager
-from datetime import date, datetime, timezone
+from datetime import UTC, date, datetime
 from hashlib import sha256
 from pathlib import Path
 from typing import Annotated
@@ -71,6 +73,7 @@ from shared.chat import (
 from shared.config import load_config, load_keys_from_env
 from shared.holdings import is_holding, load_holdings
 from shared.logging_setup import get_logger, setup_logging
+from shared.metrics import today_cost_utc
 from shared.storage import list_audits, load_audit, load_last_two_audits, save_audit
 from web.diff import render_audit_diff_html
 
@@ -95,16 +98,26 @@ async def lifespan(app: FastAPI):
 
 
 def _recover_stale_sessions():
-    """Mark any 'running' chat/ask sessions >10 min old as 'error'."""
-    now = datetime.now(timezone.utc)
-    for s in list_sessions(cfg, limit=1000):
+    """Mark any 'running' chat/ask sessions >10 min old as 'error'.
+
+    Round-2 audit P1-6/P1-8: failure branches now log with session_id so a
+    stuck-recovery scenario leaves a trail; the 1000-session `limit` cap
+    was removed — with per-session TTL cleanup already running on the
+    same startup hook, there's no practical reason to artificially bound
+    the recovery pass. If session count ever exceeds ~10k we have a
+    bigger housekeeping problem to notice first.
+    """
+    now = datetime.now(UTC)
+    recovered = 0
+    for s in list_sessions(cfg):  # no limit — see docstring
         if s.get("audit_status") != "running":
             continue
+        sid = s.get("session_id", "?")
         try:
             ts = s.get("updated_at", "")
             dt = datetime.fromisoformat(ts)
             if dt.tzinfo is None:
-                dt = dt.replace(tzinfo=timezone.utc)
+                dt = dt.replace(tzinfo=UTC)
             age_s = (now - dt).total_seconds()
             if age_s > 600:
                 sess = load_session(cfg, s["session_id"])
@@ -117,8 +130,15 @@ def _recover_stale_sessions():
                         )
                     )
                     save_session(cfg, sess)
-        except Exception:
+                    recovered += 1
+        except Exception as e:
+            log.error(
+                "stale-session recovery failed",
+                extra={"session_id": sid, "err": str(e)[:120]},
+            )
             continue
+    if recovered:
+        log.info("stale-session recovery", extra={"recovered": recovered})
 
 
 app = FastAPI(title="Moatlens", version="0.5.0", lifespan=lifespan)
@@ -479,6 +499,19 @@ async def chat_stream(request: Request, session_id: str):
 
     keys = load_keys_from_env()
 
+    # Round-2 P1-5: daily budget guard. Chat stream is where Claude cost actually
+    # accrues; refuse-and-stream an error event rather than 402 so the frontend
+    # UX stays consistent (SSE-delivered error, not HTTP-level boundary).
+    budget_ok, budget_msg, today_usd = _check_daily_budget(cfg)
+    if not budget_ok:
+        log.warning("chat audit blocked by daily budget", extra={"today_cost_usd": today_usd})
+
+        async def _blocked():
+            yield ":ok\n\n"
+            yield _sse({"kind": "error", "message": budget_msg})
+
+        return StreamingResponse(_blocked(), media_type="text/event-stream")
+
     async def _gen():
         yield ":ok\n\n"
         loop = asyncio.get_event_loop()
@@ -509,7 +542,7 @@ async def chat_stream(request: Request, session_id: str):
         while not done.is_set():
             try:
                 tag, data = await asyncio.wait_for(queue.get(), timeout=15.0)
-            except asyncio.TimeoutError:
+            except TimeoutError:
                 # Heartbeat — keeps proxies and browsers happy
                 yield ":keepalive\n\n"
                 continue
@@ -623,7 +656,7 @@ async def ask_stream(request: Request, session_id: str):
         while True:
             try:
                 tag, data = await asyncio.wait_for(queue.get(), timeout=15.0)
-            except asyncio.TimeoutError:
+            except TimeoutError:
                 yield ":keepalive\n\n"
                 continue
             if tag == "done":
@@ -747,6 +780,12 @@ async def audit_new_post(
     ok, missing = keys.has_required()
     if not ok:
         raise HTTPException(400, f"缺 key: {missing} —— 在 .env 里补上")
+
+    # Round-2 P1-5: daily budget guard — audits are the only expensive path.
+    budget_ok, budget_msg, today_usd = _check_daily_budget(cfg)
+    if not budget_ok:
+        log.warning("audit blocked by daily budget", extra={"today_cost_usd": today_usd})
+        raise HTTPException(402, budget_msg)
 
     try:
         report = run_audit_auto(
@@ -997,11 +1036,85 @@ async def learn_concept(request: Request, slug: str):
 # =====================================================================
 
 
+# Round-2 P1-5 / P0-2: budget guard + real health.
+# Daily cost ceiling (USD). Override via env MOATLENS_DAILY_BUDGET_USD.
+# Set deliberately loose — this catches the "user re-ran the same audit 10
+# times by accident" class of bug, not routine single-audit variance.
+_DEFAULT_DAILY_BUDGET_USD = float(os.environ.get("MOATLENS_DAILY_BUDGET_USD", "5.0"))
+
+
+def _check_daily_budget(cfg) -> tuple[bool, str, float]:
+    """Return (ok, message, today_usd). Called before Claude/Perplexity-
+    spending audits so a runaway loop can't blow through the budget
+    silently."""
+    try:
+        today = today_cost_utc(cfg)
+    except Exception as e:
+        log.warning("budget check failed; allowing audit", extra={"err": str(e)[:120]})
+        return True, "budget check unavailable", 0.0
+    if today >= _DEFAULT_DAILY_BUDGET_USD:
+        return (
+            False,
+            f"日预算 ${_DEFAULT_DAILY_BUDGET_USD:.2f} 已用完（今日 ${today:.2f}）。"
+            f" 覆盖: export MOATLENS_DAILY_BUDGET_USD=<n>",
+            today,
+        )
+    return True, "", today
+
+
 @app.get("/api/status", response_class=JSONResponse)
 async def api_status():
+    """Real health check: provider key availability + disk free + recent audit
+    activity + today's cost. Cheap: no outbound network calls, just local
+    config + filesystem checks, so can be polled from Telegram / cron."""
+    keys = load_keys_from_env()
+    keys_ok, keys_missing = keys.has_required()
+
+    try:
+        audits = list_audits(cfg)[:1]
+        last_audit_date = audits[0]["audit_date"] if audits else None
+    except Exception:
+        last_audit_date = None
+    age_days = None
+    if last_audit_date:
+        try:
+            age_days = (date.today() - date.fromisoformat(last_audit_date)).days
+        except Exception:
+            age_days = None
+
+    try:
+        du = shutil.disk_usage(str(cfg.data_dir))
+        disk_free_gb = round(du.free / (1024**3), 2)
+    except Exception:
+        disk_free_gb = None
+
+    try:
+        today_usd = today_cost_utc(cfg)
+    except Exception:
+        today_usd = None
+
+    # Degraded if: keys missing, OR disk < 1 GB free, OR last audit > 30 days.
+    degraded_reasons = []
+    if not keys_ok:
+        degraded_reasons.append(f"missing keys: {keys_missing}")
+    if disk_free_gb is not None and disk_free_gb < 1.0:
+        degraded_reasons.append(f"low disk ({disk_free_gb} GB)")
+    if age_days is not None and age_days > 30:
+        degraded_reasons.append(f"last audit {age_days}d ago")
+
+    status = "ok" if not degraded_reasons else "degraded"
+
     return {
-        "status": "ok",
-        "version": "0.5.0",
+        "status": status,
+        "version": "0.6.1",
         "mode": "single-user",
         "timestamp": datetime.now().isoformat(),
+        "keys_loaded": keys_ok,
+        "keys_missing": keys_missing,
+        "last_audit_date": last_audit_date,
+        "last_audit_age_days": age_days,
+        "disk_free_gb": disk_free_gb,
+        "today_cost_usd": round(today_usd, 4) if today_usd is not None else None,
+        "daily_budget_usd": _DEFAULT_DAILY_BUDGET_USD,
+        "degraded_reasons": degraded_reasons,
     }

@@ -23,6 +23,8 @@ Helpers also enforce two discipline invariants across all providers:
 
 from __future__ import annotations
 
+import logging
+import time
 from collections.abc import Callable
 from typing import Any
 
@@ -33,6 +35,10 @@ from engine.cache import cache_get, cache_set
 # Default timeouts — each provider can override at call site.
 DEFAULT_TIMEOUT = 20
 DEFAULT_TIMEOUT_SLOW = 30  # for SEC extractor and similar bulk-text endpoints
+
+# Lazy logger — lets us time every HTTP call without importing the
+# full logging_setup config tree from here.
+_log = logging.getLogger("moatlens.providers.http")
 
 
 def rate_limit_gate(provider_name: str, error_class: type[Exception]) -> None:
@@ -65,9 +71,13 @@ def http_get(
     Returns the raw Response so the caller can inspect `status_code` and
     parse per-provider error bodies. Network-layer exceptions (DNS, TLS,
     connection reset, timeout) are caught and re-raised as `error_class`.
+
+    Logs `elapsed_ms` + response status at DEBUG so a "why was yesterday
+    slow?" investigation can answer without re-running the audit.
     """
+    t0 = time.monotonic()
     try:
-        return requests.get(
+        r = requests.get(
             url,
             params=params,
             headers=headers,
@@ -75,7 +85,18 @@ def http_get(
             verify=True,
         )
     except requests.exceptions.RequestException as e:
+        elapsed_ms = int((time.monotonic() - t0) * 1000)
+        _log.info(
+            "http_get network-error",
+            extra={"url": url, "elapsed_ms": elapsed_ms, "err": str(e)[:120]},
+        )
         raise error_class(f"network error: {e}")
+    elapsed_ms = int((time.monotonic() - t0) * 1000)
+    _log.debug(
+        "http_get",
+        extra={"url": url, "status": r.status_code, "elapsed_ms": elapsed_ms},
+    )
+    return r
 
 
 def http_post(
@@ -87,9 +108,11 @@ def http_post(
     json: dict | None = None,
     timeout: int = DEFAULT_TIMEOUT,
 ) -> requests.Response:
-    """POST with explicit `verify=True`. See `http_get` for the rationale."""
+    """POST with explicit `verify=True`. See `http_get` for the rationale.
+    Also logs elapsed_ms at DEBUG / INFO-on-error (same contract)."""
+    t0 = time.monotonic()
     try:
-        return requests.post(
+        r = requests.post(
             url,
             params=params,
             headers=headers,
@@ -98,7 +121,18 @@ def http_post(
             verify=True,
         )
     except requests.exceptions.RequestException as e:
+        elapsed_ms = int((time.monotonic() - t0) * 1000)
+        _log.info(
+            "http_post network-error",
+            extra={"url": url, "elapsed_ms": elapsed_ms, "err": str(e)[:120]},
+        )
         raise error_class(f"network error: {e}")
+    elapsed_ms = int((time.monotonic() - t0) * 1000)
+    _log.debug(
+        "http_post",
+        extra={"url": url, "status": r.status_code, "elapsed_ms": elapsed_ms},
+    )
+    return r
 
 
 def cached_call(

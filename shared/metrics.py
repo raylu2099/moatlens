@@ -21,10 +21,11 @@ Schema per line:
 
 Designed to be safe under concurrent writes (append-only, no rewrite).
 """
+
 from __future__ import annotations
 
 import json
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 from shared.config import Config
@@ -56,7 +57,7 @@ def log_cost(
     """Append one cost event. Errors here must never propagate."""
     try:
         entry = {
-            "ts": datetime.now(timezone.utc).isoformat(),
+            "ts": datetime.now(UTC).isoformat(),
             "provider": provider,
             "model": model,
             "input_tok": input_tok,
@@ -99,3 +100,11 @@ def total_cost(cfg: Config, since_iso: str | None = None) -> float:
     if since_iso:
         entries = [e for e in entries if (e.get("ts") or "") >= since_iso]
     return sum(float(e.get("cost_usd") or 0) for e in entries)
+
+
+def today_cost_utc(cfg: Config) -> float:
+    """Sum cost_usd for today (UTC). Convenience wrapper for the audit
+    start budget guard — keeping the threshold in wall-clock UTC matches
+    how cost.jsonl timestamps are stored."""
+    today_iso = datetime.now(UTC).strftime("%Y-%m-%dT00:00:00+00:00")
+    return total_cost(cfg, since_iso=today_iso)

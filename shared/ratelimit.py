@@ -23,8 +23,13 @@ These are *very* loose for a single user — they exist solely to catch bugs
 
 from __future__ import annotations
 
+import logging
 import threading
 import time
+
+# Lazy to avoid importing shared.logging_setup (which pulls pathlib / handlers)
+# on every ratelimit call — use the root logger's child namespace directly.
+_log = logging.getLogger("moatlens.ratelimit")
 
 
 class RateLimitExceeded(RuntimeError):
@@ -64,11 +69,23 @@ _BUCKETS: dict[str, TokenBucket] = {
 
 
 def require_token(provider: str) -> None:
-    """Take a token for `provider`, or raise RateLimitExceeded."""
+    """Take a token for `provider`, or raise RateLimitExceeded.
+
+    Logs a WARNING before raising so the event leaves a trail in
+    logs/moatlens.log — previously the exhaustion was only observable
+    via the stage verdict (SKIP) which made it impossible to tell a
+    network outage from a rate-limit hit in retrospect.
+    """
     bucket = _BUCKETS.get(provider)
     if bucket is None:
         return  # unknown provider, no limit
     if not bucket.take(1):
+        # Log with structured extras so JsonFormatter picks them up for
+        # post-hoc dashboards / greps.
+        _log.warning(
+            "rate-limit exhausted; likely runaway loop",
+            extra={"provider": provider, "bucket_capacity": bucket.capacity},
+        )
         raise RateLimitExceeded(f"{provider}: rate limit exceeded. Sanity-check for runaway loops.")
 
 
