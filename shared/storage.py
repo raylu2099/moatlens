@@ -201,7 +201,13 @@ def _any_ticker_dir_changed_after(root: Path, after_mtime: float) -> bool:
     return False
 
 
-def list_audits(cfg: Config) -> list[dict]:
+def list_audits(
+    cfg: Config,
+    *,
+    ticker_filter: str | None = None,
+    action_filter: str | None = None,
+    limit: int | None = None,
+) -> list[dict]:
     """Return newest-first [{ticker, audit_date, action, confidence, total_cost_usd, age_days, stale_level, ...}, ...].
 
     Round-2 audit P0-8: was doing `Path.exists()` on every indexed row on every
@@ -211,6 +217,11 @@ def list_audits(cfg: Config) -> list[dict]:
     have been added or deleted, so the index is trustworthy — skip the per-row
     validation. Still catches hand-deleted JSONs on the next call because the
     deletion bumps the parent ticker-dir's mtime.
+
+    Round-2 audit P2-4: optional server-side filters. Callers that only need
+    "show AAPL history" or "show all FAIL verdicts" now push the filter into
+    this function rather than loading everything and filtering in memory.
+    Important once audits accumulate into the thousands.
     """
     root = audits_root(cfg)
     if not root.exists():
@@ -229,6 +240,16 @@ def list_audits(cfg: Config) -> list[dict]:
             valid = [r for r in rows if Path(r.get("json_path", "")).exists()]
             if len(valid) != len(rows):
                 rows = rebuild_index(cfg)
+
+    # Filter BEFORE decorating age — decorate is O(N) and we may shrink N a lot.
+    if ticker_filter:
+        tf = ticker_filter.upper()
+        rows = [r for r in rows if tf in r.get("ticker", "").upper()]
+    if action_filter:
+        af = action_filter.upper()
+        rows = [r for r in rows if (r.get("action") or "").upper() == af]
+    if limit is not None:
+        rows = rows[:limit]
     return _decorate_age(rows)
 
 

@@ -865,16 +865,19 @@ async def audit_view(request: Request, ticker: str, date: str):
 
 @app.get("/history", response_class=HTMLResponse)
 async def history(request: Request, q: str = "", filter_action: str = ""):
-    audits = list_audits(cfg)
+    # Round-2 P2-4: push ticker / action filters into list_audits so we
+    # don't materialize thousands of rows in memory just to drop most of them.
+    # P2-1: "FAILED" filter lets the user pull up audits where the verdict
+    # came out as AVOID / FAIL quickly (a common "what did I reject recently?"
+    # question).
+    audits = list_audits(
+        cfg,
+        ticker_filter=q or None,
+        action_filter=filter_action or None,
+    )
     held = {h["ticker"] for h in load_holdings(cfg)}
     for a in audits:
         a["is_holding"] = a["ticker"] in held
-
-    if q:
-        q_upper = q.upper()
-        audits = [a for a in audits if q_upper in a["ticker"]]
-    if filter_action:
-        audits = [a for a in audits if a["action"] == filter_action.upper()]
 
     stale_count = sum(1 for a in audits if a.get("stale_level") in ("stale", "very_stale"))
     return templates.TemplateResponse(

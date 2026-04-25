@@ -77,7 +77,12 @@ def load_config() -> Config:
         claude_model=_env("CLAUDE_MODEL", "claude-sonnet-4-5"),
         pplx_model_search=_env("PPLX_MODEL_SEARCH", "sonar"),
         pplx_model_analysis=_env("PPLX_MODEL_ANALYSIS", "sonar-pro"),
-        cache_fundamentals_ttl=int(_env("CACHE_FUNDAMENTALS_TTL", "43200")),
+        # Round-2 audit P1-3: fundamentals TTL bumped 12h → 7d.
+        # Quarterly filings only change every 90 days; bumping to a week
+        # cuts re-fetches of income/balance/cashflow by ~14×. Override via
+        # env if a ticker publishes an amended 10-K and you need to force
+        # a refresh without waiting out the TTL.
+        cache_fundamentals_ttl=int(_env("CACHE_FUNDAMENTALS_TTL", "604800")),
         cache_perplexity_ttl=int(_env("CACHE_PERPLEXITY_TTL", "21600")),
         cache_macro_ttl=int(_env("CACHE_MACRO_TTL", "86400")),
         project_root=PROJECT_ROOT,
