@@ -197,7 +197,7 @@ Stage {stage.stage_id}：{stage.stage_name}
         keys,
         SYSTEM_PROMPT_COACH,
         user_prompt,
-        model="claude-haiku-4-5",
+        model=cfg.claude_model_coach,  # R3-8: configurable via CLAUDE_MODEL_COACH
         max_tokens=600,
     )
 

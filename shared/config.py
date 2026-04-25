@@ -55,6 +55,12 @@ class Config:
 
     project_root: Path
 
+    # R3-8: cheaper model for coach commentary + ask intent + lightweight
+    # extracts. Defaults to haiku-4-5; override via CLAUDE_MODEL_COACH.
+    # Has a default so existing test fixtures don't need to be updated —
+    # they instantiate Config positionally up to project_root.
+    claude_model_coach: str = "claude-haiku-4-5"
+
 
 def _env(key: str, default: str = "") -> str:
     return os.environ.get(key, default)
@@ -74,7 +80,12 @@ def load_config() -> Config:
         cache_dir=cache_dir,
         prompts_dir=prompts_dir,
         docs_dir=docs_dir,
-        claude_model=_env("CLAUDE_MODEL", "claude-sonnet-4-5"),
+        # R3-8: bump default sonnet to 4-6 (latest in the 4-series at session
+        # date); coach/ask still use haiku-4-5 by default but expose it via
+        # CLAUDE_MODEL_COACH so a future haiku release can be tested without
+        # editing source.
+        claude_model=_env("CLAUDE_MODEL", "claude-sonnet-4-6"),
+        claude_model_coach=_env("CLAUDE_MODEL_COACH", "claude-haiku-4-5"),
         pplx_model_search=_env("PPLX_MODEL_SEARCH", "sonar"),
         pplx_model_analysis=_env("PPLX_MODEL_ANALYSIS", "sonar-pro"),
         # Round-2 audit P1-3: fundamentals TTL bumped 12h → 7d.

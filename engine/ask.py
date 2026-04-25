@@ -8,17 +8,17 @@ citations.
 Never runs stages 3/4/8 unless explicitly needed — /ask is meant to be
 cheap and fast. Deep audits should go through /chat.
 """
+
 from __future__ import annotations
 
 import json
 import re
+from collections.abc import Iterator
 from dataclasses import dataclass
-from typing import Iterator
 
 from engine.models import StageResult, Verdict
 from engine.providers import claude as p_claude
 from shared.config import ApiKeys, Config
-
 
 # -----------------------------------------------------------------------
 # Intent routing
@@ -66,7 +66,7 @@ class AskIntent:
     query: str
     ticker: str
     stages: list[int]
-    rationale: str      # human-readable Chinese explanation of why these stages
+    rationale: str  # human-readable Chinese explanation of why these stages
 
 
 def keyword_route(query: str) -> tuple[list[int], str] | None:
@@ -119,8 +119,12 @@ def haiku_route(cfg: Config, keys: ApiKeys, query: str) -> tuple[list[int], str]
 {"stages": [1, 6, 7], "rationale": "用户问估值相关，无需跑护城河/管理层深度分析"}
 """
     text, _cost = p_claude.analyze(
-        cfg, keys, system, f"用户问题：{query}",
-        model="claude-haiku-4-5", max_tokens=300,
+        cfg,
+        keys,
+        system,
+        f"用户问题：{query}",
+        model=cfg.claude_model_coach,  # R3-8: configurable via CLAUDE_MODEL_COACH
+        max_tokens=300,
     )
     try:
         m = re.search(r"\{.*\}", text, re.DOTALL)
@@ -150,13 +154,15 @@ def route_intent(cfg: Config, keys: ApiKeys, query: str, ticker: str) -> AskInte
 # Answer synthesis
 # -----------------------------------------------------------------------
 
+
 @dataclass
 class AnswerBlock:
     """One section of the structured answer."""
-    heading: str           # e.g. "质量", "估值", "安全边际"
-    verdict: str           # "✅" / "🟡" / "❌"
-    prose: str             # 2-3 sentences with [n] citation markers
-    metrics: list[dict]    # rendered metric dicts
+
+    heading: str  # e.g. "质量", "估值", "安全边际"
+    verdict: str  # "✅" / "🟡" / "❌"
+    prose: str  # 2-3 sentences with [n] citation markers
+    metrics: list[dict]  # rendered metric dicts
     citation_ids: list[str]  # references to wisdom.yaml entries
 
 
@@ -170,8 +176,14 @@ def _stage_to_block(stage: StageResult) -> AnswerBlock:
     }.get(stage.verdict, "")
 
     heading_map = {
-        1: "质量", 2: "诚实度", 3: "护城河", 4: "管理层",
-        5: "所有者盈利", 6: "估值", 7: "安全边际", 8: "反方论点",
+        1: "质量",
+        2: "诚实度",
+        3: "护城河",
+        4: "管理层",
+        5: "所有者盈利",
+        6: "估值",
+        7: "安全边际",
+        8: "反方论点",
     }
     heading = heading_map.get(stage.stage_id, stage.stage_name)
 
@@ -189,14 +201,23 @@ def _stage_to_block(stage: StageResult) -> AnswerBlock:
         val = m.value
         if val is None:
             val = "—"
-        metrics.append({
-            "name": m.name, "value": val, "unit": m.unit,
-            "threshold": m.threshold, "pass": m.pass_, "note": m.note,
-        })
+        metrics.append(
+            {
+                "name": m.name,
+                "value": val,
+                "unit": m.unit,
+                "threshold": m.threshold,
+                "pass": m.pass_,
+                "note": m.note,
+            }
+        )
 
     return AnswerBlock(
-        heading=heading, verdict=verdict_mark,
-        prose=prose, metrics=metrics, citation_ids=[],
+        heading=heading,
+        verdict=verdict_mark,
+        prose=prose,
+        metrics=metrics,
+        citation_ids=[],
     )
 
 
@@ -212,10 +233,11 @@ def stream_ask(cfg, keys, ask_session) -> Iterator[Event]:
     Stream an /ask audit: route intent → run selected stages → stream blocks
     with wisdom citations → final summary with continue-suggestions.
     """
-    from engine import wisdom as wisdom_mod
-    from engine.orchestrator import _run_stage_safe, STAGES
-    from engine.models import AuditReport
     from datetime import datetime
+
+    from engine import wisdom as wisdom_mod
+    from engine.models import AuditReport
+    from engine.orchestrator import STAGES, _run_stage_safe
     from engine.providers import yfinance_provider as yfp
     from shared.ask import save_ask_session
 
@@ -230,11 +252,14 @@ def stream_ask(cfg, keys, ask_session) -> Iterator[Event]:
     ask_session.status = "running"
     save_ask_session(cfg, ask_session)
 
-    yield "intent", {
-        "stages": intent.stages,
-        "stage_names": [STAGE_NAMES_CN.get(s, f"Stage {s}") for s in intent.stages],
-        "rationale": intent.rationale,
-    }
+    yield (
+        "intent",
+        {
+            "stages": intent.stages,
+            "stage_names": [STAGE_NAMES_CN.get(s, f"Stage {s}") for s in intent.stages],
+            "rationale": intent.rationale,
+        },
+    )
 
     company = yfp.fetch_company_info(ask_session.ticker)
     report = AuditReport(
@@ -260,10 +285,19 @@ def stream_ask(cfg, keys, ask_session) -> Iterator[Event]:
     blocks: list[AnswerBlock] = []
 
     for sid in to_run:
-        yield "stage_start", {"stage_id": sid, "stage_name": STAGE_NAMES_CN.get(sid, f"Stage {sid}")}
+        yield (
+            "stage_start",
+            {"stage_id": sid, "stage_name": STAGE_NAMES_CN.get(sid, f"Stage {sid}")},
+        )
         result = _run_stage_safe(
-            sid, stage_fns[sid], cfg, keys, ask_session.ticker,
-            tech_mode=False, prior=prior, anchor_thesis=ask_session.query,
+            sid,
+            stage_fns[sid],
+            cfg,
+            keys,
+            ask_session.ticker,
+            tech_mode=False,
+            prior=prior,
+            anchor_thesis=ask_session.query,
             my_variant_view="",
         )
         report.stages.append(result)
@@ -274,26 +308,39 @@ def stream_ask(cfg, keys, ask_session) -> Iterator[Event]:
             block = _stage_to_block(result)
             # Attach a matching wisdom quote
             q = wisdom_mod.pick_for_stage(
-                cfg, sid, ask_session.session_id, exclude_ids=used_quote_ids,
+                cfg,
+                sid,
+                ask_session.session_id,
+                exclude_ids=used_quote_ids,
             )
             if q:
                 used_quote_ids.add(q.id)
                 block.citation_ids = [q.id]
-                yield "quote", {
-                    "stage_id": sid,
-                    "quote": {
-                        "id": q.id, "author": q.author,
-                        "text_cn": q.text_cn, "text_en": q.text_en,
-                        "source": q.source,
+                yield (
+                    "quote",
+                    {
+                        "stage_id": sid,
+                        "quote": {
+                            "id": q.id,
+                            "author": q.author,
+                            "text_cn": q.text_cn,
+                            "text_en": q.text_en,
+                            "source": q.source,
+                        },
                     },
-                }
+                )
             blocks.append(block)
-            yield "answer_block", {
-                "stage_id": sid,
-                "heading": block.heading, "verdict": block.verdict,
-                "prose": block.prose, "metrics": block.metrics,
-                "citation_ids": block.citation_ids,
-            }
+            yield (
+                "answer_block",
+                {
+                    "stage_id": sid,
+                    "heading": block.heading,
+                    "verdict": block.verdict,
+                    "prose": block.prose,
+                    "metrics": block.metrics,
+                    "citation_ids": block.citation_ids,
+                },
+            )
         else:
             # Dependency only — tell client we ran it silently
             yield "dep_stage", {"stage_id": sid, "verdict": result.verdict.value}
@@ -303,12 +350,15 @@ def stream_ask(cfg, keys, ask_session) -> Iterator[Event]:
     ask_session.status = "complete"
     save_ask_session(cfg, ask_session)
 
-    yield "final", {
-        "short_answer": short_answer,
-        "blocks_count": len(blocks),
-        "citations_count": len(used_quote_ids),
-        "continue_suggestions": _continue_suggestions(intent, blocks),
-    }
+    yield (
+        "final",
+        {
+            "short_answer": short_answer,
+            "blocks_count": len(blocks),
+            "citations_count": len(used_quote_ids),
+            "continue_suggestions": _continue_suggestions(intent, blocks),
+        },
+    )
 
 
 def _synthesize_short_answer(blocks: list[AnswerBlock]) -> str:

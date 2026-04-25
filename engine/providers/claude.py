@@ -146,12 +146,15 @@ def analyze_cheap(
     user_prompt: str,
     max_tokens: int = 2000,
 ) -> tuple[str, float]:
+    """Lightweight extraction path. R3-8: uses cfg.claude_model_coach
+    (default haiku-4-5) so a future haiku release can be A/B-tested via
+    CLAUDE_MODEL_COACH env var without touching source."""
     return analyze(
         cfg,
         keys,
         system_prompt,
         user_prompt,
-        model="claude-haiku-4-5",
+        model=cfg.claude_model_coach,
         max_tokens=max_tokens,
     )
 
