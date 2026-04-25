@@ -20,6 +20,7 @@ code six months from now. Examples: "why no SQLite", "why BYOK was dropped",
 | 007 | Conversational-coach UX over form-based | Accepted | 2026-04-18 |
 | 008 | Three-mode landing page | Accepted | 2026-04-18 |
 | 009 | 期权（LEAPS）在审视范围之外 | Accepted | 2026-04-22 |
+| 010 | yfinance ToS gray area — self-use only, not SaaS | Accepted | 2026-04-25 |
 
 ## Superseded / historical
 (none yet)
