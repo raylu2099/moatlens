@@ -1,6 +1,17 @@
+[project]
+name = "moatlens"
+version = "0.6.1"
+description = "Single-user value-investing audit tool (Buffett/Munger/Marks/Graham)."
+requires-python = ">=3.12"
+license = { text = "Apache-2.0" }
+authors = [{ name = "Ray" }]
+# Runtime deps listed in requirements.txt; dev deps in requirements-dev.txt.
+# Not shipped as a package — this [project] section exists so `pip install .`,
+# `uv sync`, and IDE resolvers behave correctly.
+
 [tool.ruff]
 line-length = 100
-target-version = "py310"
+target-version = "py312"
 exclude = [".git", "__pycache__", ".venv", "venv", "data", "docs", "prompts"]
 
 [tool.ruff.lint]

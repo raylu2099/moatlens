@@ -1,11 +1,14 @@
-# Moatlens — Python 3.10+ required
+# Moatlens — Python 3.12, runtime deps only.
+# For dev/test tooling, see requirements-dev.txt.
+# The lockfile requirements.lock.txt is the NAS micromamba ytdlp env
+# snapshot (shared with yt-dlp) — not a Moatlens-specific pin.
 
 # Core
 pydantic>=2.6.0
 python-dotenv>=1.0.0
 
 # Data providers
-requests>=2.31.0
+requests>=2.32.0       # >= 2.32 closes CVE-2024-35195
 yfinance>=0.2.40
 anthropic>=0.40.0
 
@@ -23,6 +26,3 @@ pyyaml>=6.0
 # CLI UX
 rich>=13.7.0
 typer>=0.12.0
-
-# Dev
-pytest>=7.0.0
