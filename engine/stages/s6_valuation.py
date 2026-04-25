@@ -319,6 +319,27 @@ def run(
     metrics = []
     findings = []
 
+    # R3-3: yfinance silently returns None on rate-limit / network / HTML
+    # responses (no exception raised). Surface this loudly instead of letting
+    # the DCF math run on zero-substituted inputs and emit a garbage IV.
+    yf_unreachable = (
+        current_price is None
+        and multiples.market_cap is None
+        and multiples.shares_outstanding is None
+    )
+    if yf_unreachable:
+        return StageResult(
+            stage_id=STAGE_ID,
+            stage_name=STAGE_NAME,
+            verdict=Verdict.SKIP,
+            findings=[
+                "⚠️ yfinance unreachable — 无法获取当前价、市值、流通股数。"
+                "可能是 Yahoo 限流或被 GFW 拦截。稍后重试或检查代理。",
+                f"诊断: multiples.err={multiples.err or 'None'}",
+            ],
+            elapsed_seconds=time.time() - t0,
+        )
+
     if not (cashflow.periods and income.periods and multiples.shares_outstanding):
         return StageResult(
             stage_id=STAGE_ID,
