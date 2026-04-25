@@ -46,8 +46,8 @@
                 </div>
             </form>
             <div class="text-xs text-gray-500">
-                试试: <button class="hover:text-gold" type="button" onclick="document.getElementById('ask-input').value='AAPL 值得买吗？'">AAPL 值得买吗？</button> ·
-                <button class="hover:text-gold" type="button" onclick="document.getElementById('ask-input').value='TSLA 管理层怎样？'">TSLA 管理层</button>
+                试试: <button class="hover:text-gold" type="button" data-fill-target="ask-input" data-fill-value="AAPL 值得买吗？">AAPL 值得买吗？</button> ·
+                <button class="hover:text-gold" type="button" data-fill-target="ask-input" data-fill-value="TSLA 管理层怎样？">TSLA 管理层</button>
             </div>
         </div>
 
@@ -76,9 +76,9 @@
                 </div>
             </form>
             <div class="text-xs text-gray-500">
-                试试: <button class="hover:text-gold" type="button" onclick="document.getElementById('chat-input').value='NVDA'">NVDA</button> ·
-                <button class="hover:text-gold" type="button" onclick="document.getElementById('chat-input').value='BRK.B'">BRK.B</button> ·
-                <button class="hover:text-gold" type="button" onclick="document.getElementById('chat-input').value='MSFT'">MSFT</button>
+                试试: <button class="hover:text-gold" type="button" data-fill-target="chat-input" data-fill-value="NVDA">NVDA</button> ·
+                <button class="hover:text-gold" type="button" data-fill-target="chat-input" data-fill-value="BRK.B">BRK.B</button> ·
+                <button class="hover:text-gold" type="button" data-fill-target="chat-input" data-fill-value="MSFT">MSFT</button>
             </div>
         </div>
 
@@ -168,7 +168,24 @@
 </div>
 
 <script>
-// Keyboard accessibility: arrows move focus between mode cards
+// Keyboard accessibility (round-2 audit P0-6): arrow keys move focus
+// between mode cards; Enter / Space on a focused card activates it —
+// submits the inner form if present (ask / chat cards), otherwise
+// follows the primary anchor (portfolio card). Previously arrows moved
+// focus but Enter did nothing — keyboard users had to Tab to the inner
+// submit button, which defeated the radiogroup affordance.
+// P2-2: example-fill buttons use data attributes + event delegation, so
+// renaming the input IDs can't silently break the buttons (old onclick=""
+// hardcoded getElementById values that rotted with any rename).
+(function () {
+    document.addEventListener('click', (e) => {
+        const btn = e.target.closest('[data-fill-target]');
+        if (!btn) return;
+        const target = document.getElementById(btn.dataset.fillTarget);
+        if (target) target.value = btn.dataset.fillValue || '';
+    });
+})();
+
 (function () {
     const cards = document.querySelectorAll('[role="radio"]');
     cards.forEach((card, i) => {
@@ -179,6 +196,19 @@
             } else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') {
                 e.preventDefault();
                 cards[(i - 1 + cards.length) % cards.length].focus();
+            } else if (e.key === 'Enter' || e.key === ' ') {
+                // Activate this card. Priority: form submit > primary anchor.
+                const form = card.querySelector('form');
+                if (form) {
+                    e.preventDefault();
+                    form.requestSubmit();
+                    return;
+                }
+                const link = card.querySelector('a[href]');
+                if (link) {
+                    e.preventDefault();
+                    link.click();
+                }
             }
         });
     });

@@ -30,10 +30,26 @@
     <pre class="bg-ink-900 inline-block px-4 py-2 mt-2 rounded text-xs text-gray-300">python -m cli hold add AAPL --size "5%"</pre>
 </div>
 {% else %}
-<table class="w-full text-sm bg-ink-800 border border-ink-700 rounded-lg overflow-hidden">
+
+{# P0-5: distinguish "price fetch failed" from "no holdings" — if every row
+   has price=None AND we have holdings, show an explicit data-unavailable banner.
+   The "no holdings" state was the {% if not rows %} branch above. #}
+{% set _rows_with_price = rows | selectattr('price') | list %}
+{% if not _rows_with_price %}
+<div class="mb-4 bg-red-900/20 border border-red-800 text-red-200 rounded-lg p-3 text-sm">
+    ⚠️ 所有持仓的实时价格都拉不到。yfinance 可能连不通，或 ticker 列表里有已 delist 的符号。
+    <span class="text-xs text-red-300/70 block mt-1">刷新页面试一次；持续失败查 <code class="bg-red-900/40 px-1">/api/status</code> 的 <code>keys_loaded</code>。</span>
+</div>
+{% endif %}
+
+{# P0-4: horizontal scroll wrapper + sticky first column so the 9-wide table
+   stays readable on iPhone-width screens (~390px). The sticky left column
+   keeps the ticker in view while the user swipes through the numeric cells. #}
+<div class="overflow-x-auto -mx-6 sm:mx-0">
+<table class="min-w-[760px] sm:w-full text-sm bg-ink-800 border border-ink-700 rounded-lg overflow-hidden">
     <thead class="bg-ink-700 text-gray-400 text-xs uppercase">
         <tr>
-            <th class="text-left px-4 py-2">Ticker</th>
+            <th class="text-left px-4 py-2 sticky left-0 bg-ink-700 z-10">Ticker</th>
             <th class="text-right px-4 py-2">当前价</th>
             <th class="text-right px-4 py-2">理想买入</th>
             <th class="text-right px-4 py-2">开始减仓</th>
@@ -47,7 +63,7 @@
     <tbody>
     {% for r in rows %}
         <tr class="border-t border-ink-700 hover:bg-ink-700/30">
-            <td class="px-4 py-3">
+            <td class="px-4 py-3 sticky left-0 bg-ink-800 z-10">
                 {% if r.audit_date %}
                 <a href="/audit/{{ r.ticker }}/{{ r.audit_date }}" class="text-gold font-medium">{{ r.ticker }}</a>
                 {% else %}
@@ -91,6 +107,7 @@
     {% endfor %}
     </tbody>
 </table>
+</div>
 {% endif %}
 
 <p class="mt-6 text-xs text-gray-500">
