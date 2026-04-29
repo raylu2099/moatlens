@@ -2,10 +2,12 @@
 {% block title %}{{ slug | replace('-', ' ') | title }} — Moatlens Learn{% endblock %}
 {% block content %}
 
-<a href="/learn" class="text-gold text-sm hover:underline mb-4 inline-block">← All concepts</a>
+<a href="/learn" style="display:inline-flex; align-items:center; gap:var(--s-2); color:var(--fg-2); font-size:var(--t-meta); margin-bottom:var(--s-6); transition: color 200ms ease;" onmouseover="this.style.color='var(--brand)'" onmouseout="this.style.color='var(--fg-2)'">
+    ← All concepts
+</a>
 
-<div class="bg-ink-800 border border-ink-700 rounded-lg p-8 prose-audit max-w-3xl">
-{{ content | safe }}
-</div>
+<article class="prose-audit reveal reveal-1" style="max-width: 720px;">
+    {{ content | safe }}
+</article>
 
 {% endblock %}

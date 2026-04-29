@@ -2,19 +2,29 @@
 {% block title %}知识库 — Moatlens{% endblock %}
 {% block content %}
 
-<h1 class="text-2xl font-bold mb-2">知识库</h1>
-<p class="text-gray-400 mb-6">Moatlens 背后的核心概念 —— 摘自 Buffett 股东信、Munger《Poor Charlie's Almanack》、Howard Marks memos、Anthony Bolton。</p>
+<section class="page-header reveal reveal-1">
+    <h1>知识库</h1>
+    <p class="lede">Moatlens 背后的核心概念 — 摘自 Buffett 股东信、Munger《Poor Charlie's Almanack》、Howard Marks memos、Anthony Bolton。</p>
+</section>
 
 {% if concepts %}
-<div class="grid md:grid-cols-2 gap-3">
-{% for c in concepts %}
-    <a href="/learn/{{ c.slug }}" class="bg-ink-800 border border-ink-700 hover:border-gold rounded p-4 transition">
-        <div class="font-bold">{{ c.title }}</div>
+<div class="reveal reveal-2" style="display:grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap:var(--s-3);">
+    {% for c in concepts %}
+    <a href="/learn/{{ c.slug }}" class="card" style="text-decoration:none; padding:var(--s-5);">
+        <div class="num"><span>CONCEPT</span><span>·</span></div>
+        <h3 style="font-family:var(--font-display); font-size:1.15rem; font-weight:700; letter-spacing:-0.02em; color:var(--fg); margin-bottom:var(--s-2); line-height:1.25;">
+            {{ c.title }}
+        </h3>
+        <span style="display:inline-flex; align-items:center; gap:var(--s-2); margin-top:var(--s-2); font-size:var(--t-meta); color:var(--fg-3); font-family:var(--font-mono);">
+            Read →
+        </span>
     </a>
-{% endfor %}
+    {% endfor %}
 </div>
 {% else %}
-<p class="text-gray-500">知识库还未填充。</p>
+<div class="card" style="text-align:center;">
+    <p style="color:var(--fg-2);">知识库还未填充。</p>
+</div>
 {% endif %}
 
 {% endblock %}

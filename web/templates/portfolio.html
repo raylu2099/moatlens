@@ -2,116 +2,109 @@
 {% block title %}持仓 — Moatlens{% endblock %}
 {% block content %}
 
-<div class="flex justify-between items-center mb-6">
-    <h1 class="text-2xl font-bold">持仓看板</h1>
-    <div class="text-sm text-gray-500">{{ rows | length }} 只</div>
-</div>
+<section class="page-header reveal reveal-1">
+    <h1>持仓看板</h1>
+    <p class="lede">{{ rows | length }} 只标记的标的，按上次审视和当前价位看是否进入买入/减仓区间。</p>
+</section>
 
 {% set review_rows = rows | selectattr('review_needed') | list %}
 {% if review_rows %}
-<div class="mb-4 bg-amber-900/20 border border-amber-700 text-amber-200 rounded-lg p-4 text-sm">
-    <div class="font-medium mb-1">🔔 {{ review_rows | length }} 只持仓建议重新 audit</div>
-    <div class="text-xs text-amber-300/80">
-        以下股票自上次 audit 后价格变化已超 15%，超过 30 天未更新估值 —
-        Munger 原则是 "inactivity is intelligent"，但"该动时动"。不是止损信号，是提醒你重新看一眼基本面有没有变。
-    </div>
-    <ul class="mt-2 text-xs space-y-0.5">
+<div class="notice warn reveal reveal-2">
+    <strong>🔔 {{ review_rows | length }} 只持仓建议重新 audit</strong> ——
+    自上次 audit 后价格变化 ≥ 15%，超过 30 天未更新估值。Munger "inactivity is intelligent"，但"该动时动"。
+    不是止损信号，是提醒看一眼基本面有没有变。
+    <ul style="margin-top:var(--s-2); list-style:none; font-size:var(--t-meta); color:var(--fg-2);">
         {% for r in review_rows %}
-        <li>• <span class="font-mono text-amber-100">{{ r.ticker }}</span> — {{ r.review_reason }}</li>
+        <li>· <span class="mono" style="color:var(--watch);">{{ r.ticker }}</span> — {{ r.review_reason }}</li>
         {% endfor %}
     </ul>
 </div>
 {% endif %}
 
 {% if not rows %}
-<div class="bg-ink-800 border border-ink-700 rounded-lg p-6 text-center text-gray-400">
-    <p class="mb-2">还没有标记任何持仓。</p>
-    <p class="text-sm text-gray-500">在终端用：</p>
-    <pre class="bg-ink-900 inline-block px-4 py-2 mt-2 rounded text-xs text-gray-300">python -m cli hold add AAPL --size "5%"</pre>
+<div class="card reveal reveal-3" style="text-align:center;">
+    <p style="color:var(--fg-2); margin-bottom:var(--s-3);">还没有标记任何持仓。</p>
+    <p style="color:var(--fg-3); font-size:var(--t-meta);">在终端用：</p>
+    <code style="display:inline-block; margin-top:var(--s-3); background:var(--bg); border:1px solid var(--line); padding:var(--s-2) var(--s-4); border-radius:var(--radius-sm); font-family:var(--font-mono); color:var(--fg);">python -m cli hold add AAPL --size "5%"</code>
 </div>
 {% else %}
 
-{# P0-5: distinguish "price fetch failed" from "no holdings" — if every row
-   has price=None AND we have holdings, show an explicit data-unavailable banner.
-   The "no holdings" state was the {% if not rows %} branch above. #}
 {% set _rows_with_price = rows | selectattr('price') | list %}
 {% if not _rows_with_price %}
-<div class="mb-4 bg-red-900/20 border border-red-800 text-red-200 rounded-lg p-3 text-sm">
-    ⚠️ 所有持仓的实时价格都拉不到。yfinance 可能连不通，或 ticker 列表里有已 delist 的符号。
-    <span class="text-xs text-red-300/70 block mt-1">刷新页面试一次；持续失败查 <code class="bg-red-900/40 px-1">/api/status</code> 的 <code>keys_loaded</code>。</span>
+<div class="notice reveal reveal-2">
+    <strong>⚠️ 所有持仓的实时价格都拉不到。</strong> yfinance 可能连不通，或 ticker 列表里有已 delist 的符号。
+    刷新页面试一次；持续失败查 <code>/api/status</code> 的 <code>keys_loaded</code>。
 </div>
 {% endif %}
 
-{# P0-4: horizontal scroll wrapper + sticky first column so the 9-wide table
-   stays readable on iPhone-width screens (~390px). The sticky left column
-   keeps the ticker in view while the user swipes through the numeric cells. #}
-<div class="overflow-x-auto -mx-6 sm:mx-0">
-<table class="min-w-[760px] sm:w-full text-sm bg-ink-800 border border-ink-700 rounded-lg overflow-hidden">
-    <thead class="bg-ink-700 text-gray-400 text-xs uppercase">
-        <tr>
-            <th class="text-left px-4 py-2 sticky left-0 bg-ink-700 z-10">Ticker</th>
-            <th class="text-right px-4 py-2">当前价</th>
-            <th class="text-right px-4 py-2">理想买入</th>
-            <th class="text-right px-4 py-2">开始减仓</th>
-            <th class="text-center px-4 py-2">安全边际</th>
-            <th class="text-left px-4 py-2">Audit 日期</th>
-            <th class="text-left px-4 py-2">Age</th>
-            <th class="text-left px-4 py-2">仓位</th>
-            <th class="text-left px-4 py-2">状态</th>
-        </tr>
-    </thead>
-    <tbody>
-    {% for r in rows %}
-        <tr class="border-t border-ink-700 hover:bg-ink-700/30">
-            <td class="px-4 py-3 sticky left-0 bg-ink-800 z-10">
-                {% if r.audit_date %}
-                <a href="/audit/{{ r.ticker }}/{{ r.audit_date }}" class="text-gold font-medium">{{ r.ticker }}</a>
-                {% else %}
-                <span class="text-gold">{{ r.ticker }}</span>
-                {% endif %}
-                {% if r.review_needed %}
-                <span class="ml-1 text-amber-400" title="{{ r.review_reason }}">🔔</span>
-                {% endif %}
-            </td>
-            <td class="px-4 py-3 text-right font-mono">{% if r.price %}${{ "%.2f"|format(r.price) }}{% else %}—{% endif %}</td>
-            <td class="px-4 py-3 text-right font-mono text-green-400">{% if r.target_buy %}≤ ${{ "%.2f"|format(r.target_buy) }}{% else %}—{% endif %}</td>
-            <td class="px-4 py-3 text-right font-mono text-red-400">{% if r.target_sell %}≥ ${{ "%.2f"|format(r.target_sell) }}{% else %}—{% endif %}</td>
-            <td class="px-4 py-3 text-center font-mono {% if r.mos_pct is not none and r.mos_pct >= 30 %}text-green-400{% elif r.mos_pct is not none and r.mos_pct < 0 %}text-red-400{% else %}text-gray-400{% endif %}">
-                {% if r.mos_pct is not none %}{{ "%.1f"|format(r.mos_pct) }}%{% else %}—{% endif %}
-            </td>
-            <td class="px-4 py-3 text-gray-400">{{ r.audit_date or "—" }}</td>
-            <td class="px-4 py-3 text-xs">
-                {% if r.stale_level == 'very_stale' %}
-                    <span class="text-red-400">{{ r.age_days }}d ⚠</span>
-                {% elif r.stale_level == 'stale' %}
-                    <span class="text-yellow-400">{{ r.age_days }}d</span>
-                {% elif r.age_days is not none %}
-                    <span class="text-gray-500">{{ r.age_days }}d</span>
-                {% else %}
-                    <span class="text-red-400">缺 audit</span>
-                {% endif %}
-            </td>
-            <td class="px-4 py-3 text-gray-400">{{ r.size or "—" }}</td>
-            <td class="px-4 py-3">
-                {% if r.status == 'buy_zone' %}
-                    <span class="bg-green-900/50 text-green-300 px-2 py-0.5 rounded text-xs">🟢 加仓区</span>
-                {% elif r.status == 'sell_zone' %}
-                    <span class="bg-red-900/50 text-red-300 px-2 py-0.5 rounded text-xs">🔴 减仓区</span>
-                {% elif r.status == 'hold' %}
-                    <span class="bg-yellow-900/50 text-yellow-300 px-2 py-0.5 rounded text-xs">🟡 持有</span>
-                {% else %}
-                    <span class="text-gray-500 text-xs">—</span>
-                {% endif %}
-            </td>
-        </tr>
-    {% endfor %}
-    </tbody>
-</table>
+<div class="reveal reveal-3" style="overflow-x:auto; margin: 0 calc(-1 * var(--s-6));">
+    <table class="tbl" style="margin: 0 var(--s-6); min-width: 760px;">
+        <thead>
+            <tr>
+                <th>Ticker</th>
+                <th style="text-align:right;">当前价</th>
+                <th style="text-align:right;">理想买入</th>
+                <th style="text-align:right;">开始减仓</th>
+                <th style="text-align:right;">安全边际</th>
+                <th>Audit 日期</th>
+                <th>Age</th>
+                <th>仓位</th>
+                <th>状态</th>
+            </tr>
+        </thead>
+        <tbody>
+        {% for r in rows %}
+            <tr>
+                <td>
+                    {% if r.audit_date %}
+                    <a href="/audit/{{ r.ticker }}/{{ r.audit_date }}" class="ticker" style="color:var(--brand);">{{ r.ticker }}</a>
+                    {% else %}
+                    <span class="ticker" style="color:var(--brand);">{{ r.ticker }}</span>
+                    {% endif %}
+                    {% if r.review_needed %}
+                    <span style="margin-left:var(--s-2); color:var(--watch);" title="{{ r.review_reason }}">●</span>
+                    {% endif %}
+                </td>
+                <td class="num" style="text-align:right;">{% if r.price %}${{ "%.2f"|format(r.price) }}{% else %}—{% endif %}</td>
+                <td class="num" style="text-align:right; color:var(--pass);">{% if r.target_buy %}≤ ${{ "%.2f"|format(r.target_buy) }}{% else %}—{% endif %}</td>
+                <td class="num" style="text-align:right; color:var(--fail);">{% if r.target_sell %}≥ ${{ "%.2f"|format(r.target_sell) }}{% else %}—{% endif %}</td>
+                <td class="num" style="text-align:right; {% if r.mos_pct is not none and r.mos_pct >= 30 %}color:var(--pass);{% elif r.mos_pct is not none and r.mos_pct < 0 %}color:var(--fail);{% else %}color:var(--fg-2);{% endif %}">
+                    {% if r.mos_pct is not none %}{{ "%.1f"|format(r.mos_pct) }}%{% else %}—{% endif %}
+                </td>
+                <td>{{ r.audit_date or "—" }}</td>
+                <td>
+                    {% if r.stale_level == 'very_stale' %}
+                        <span style="color:var(--fail);">{{ r.age_days }}d ⚠</span>
+                    {% elif r.stale_level == 'stale' %}
+                        <span style="color:var(--watch);">{{ r.age_days }}d</span>
+                    {% elif r.age_days is not none %}
+                        <span>{{ r.age_days }}d</span>
+                    {% else %}
+                        <span style="color:var(--fail);">缺 audit</span>
+                    {% endif %}
+                </td>
+                <td>{{ r.size or "—" }}</td>
+                <td>
+                    {% if r.status == 'buy_zone' %}
+                        <span class="verdict buy">加仓区</span>
+                    {% elif r.status == 'sell_zone' %}
+                        <span class="verdict avoid">减仓区</span>
+                    {% elif r.status == 'hold' %}
+                        <span class="verdict hold">持有</span>
+                    {% else %}
+                        <span style="color:var(--fg-3); font-size:var(--t-meta);">—</span>
+                    {% endif %}
+                </td>
+            </tr>
+        {% endfor %}
+        </tbody>
+    </table>
 </div>
+
 {% endif %}
 
-<p class="mt-6 text-xs text-gray-500">
-    ★ "缺 audit" 表示这只标为持仓但从未 audit —— 用 <code class="bg-ink-800 px-1">python -m cli audit &lt;TICKER&gt;</code> 补上。
+<p style="margin-top:var(--s-6); font-size:var(--t-meta); color:var(--fg-3);">
+    ★ "缺 audit" 表示这只标为持仓但从未 audit —— 用 <code style="background:var(--bg-1); border:1px solid var(--line); padding:0.05em 0.4em; border-radius:4px; font-family:var(--font-mono);">python -m cli audit &lt;TICKER&gt;</code> 补上。
 </p>
 
 {% endblock %}

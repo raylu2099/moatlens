@@ -2,77 +2,66 @@
 {% block title %}History — Moatlens{% endblock %}
 {% block content %}
 
-<div class="flex justify-between items-center mb-6">
-    <h1 class="text-2xl font-bold">审视历史</h1>
-    <div class="text-sm text-gray-500">{{ audits | length }} 条</div>
-</div>
+<section class="page-header reveal reveal-1">
+    <h1>审视历史</h1>
+    <p class="lede">{{ audits | length }} 次审视记录。按 ticker 搜索或按 action 筛选；季度复盘看 90 天前的 thesis。</p>
+</section>
 
-<form method="GET" class="bg-ink-800 border border-ink-700 rounded p-4 mb-4 flex gap-3">
-    <input name="q" value="{{ q }}" placeholder="搜索 ticker..." class="flex-1 bg-ink-900 border border-ink-700 rounded px-3 py-2 text-sm text-white">
-    <select name="filter_action" class="bg-ink-900 border border-ink-700 rounded px-3 py-2 text-sm text-white">
+<form method="GET" class="reveal reveal-2" style="display:flex; gap:var(--s-2); margin-bottom:var(--s-5); flex-wrap:wrap;">
+    <input name="q" value="{{ q }}" placeholder="搜索 ticker..." class="input" style="flex:1; min-width:200px;">
+    <select name="filter_action" class="input" style="flex:0 0 160px; cursor:pointer;">
         <option value="">全部 action</option>
         <option value="BUY" {% if filter_action == 'BUY' %}selected{% endif %}>BUY</option>
         <option value="WATCH" {% if filter_action == 'WATCH' %}selected{% endif %}>WATCH</option>
         <option value="HOLD" {% if filter_action == 'HOLD' %}selected{% endif %}>HOLD</option>
         <option value="AVOID" {% if filter_action == 'AVOID' %}selected{% endif %}>AVOID</option>
     </select>
-    <button type="submit" class="bg-gold text-ink-900 font-medium px-4 py-2 rounded">筛选</button>
+    <button type="submit" class="btn">筛选</button>
 </form>
 
 {% if stale_count %}
-<div class="bg-yellow-900/15 border border-yellow-800 rounded p-3 mb-4 text-sm text-yellow-200">
-    ⏳ {{ stale_count }} 条 thesis 已 ≥ 90 天未复盘。价值投资纪律要求你季度检查持仓 thesis。
+<div class="notice warn reveal reveal-2">
+    <strong>⏳ {{ stale_count }} 条 thesis ≥ 90 天未复盘。</strong>
+    价值投资纪律要求季度检查持仓 thesis。
 </div>
 {% endif %}
 
 {% if audits %}
-<div class="bg-ink-800 border border-ink-700 rounded-lg overflow-hidden">
-    <table class="w-full text-sm">
-        <thead class="bg-ink-700 text-gray-400 text-xs uppercase">
-            <tr>
-                <th class="text-left px-4 py-2">Ticker</th>
-                <th class="text-left px-4 py-2">日期</th>
-                <th class="text-left px-4 py-2">持仓?</th>
-                <th class="text-left px-4 py-2">Age</th>
-                <th class="text-left px-4 py-2">Action</th>
-                <th class="text-left px-4 py-2">置信度</th>
-                <th class="text-right px-4 py-2">成本</th>
-            </tr>
-        </thead>
-        <tbody>
-        {% for a in audits %}
-            <tr class="border-t border-ink-700 hover:bg-ink-700/30">
-                <td class="px-4 py-3">
-                    <a href="/audit/{{ a.ticker }}/{{ a.audit_date }}" class="text-gold font-medium">{{ a.ticker }}</a>
-                </td>
-                <td class="px-4 py-3 text-gray-400">{{ a.audit_date }}</td>
-                <td class="px-4 py-3 text-xs">
-                    {% if a.is_holding %}<span class="text-gold">★ 持仓</span>{% else %}<span class="text-gray-600">—</span>{% endif %}
-                </td>
-                <td class="px-4 py-3 text-xs">
-                    {% if a.stale_level == 'very_stale' %}
-                        <span class="text-red-400">{{ a.age_days }}d ⚠</span>
-                    {% elif a.stale_level == 'stale' %}
-                        <span class="text-yellow-400">{{ a.age_days }}d</span>
-                    {% else %}
-                        <span class="text-gray-500">{{ a.age_days if a.age_days is not none else '—' }}{% if a.age_days is not none %}d{% endif %}</span>
-                    {% endif %}
-                </td>
-                <td class="px-4 py-3">
-                    <span class="inline-block px-2 py-0.5 rounded text-xs
-                        {% if a.action == 'BUY' %}bg-green-900/50 text-green-300
-                        {% elif a.action == 'AVOID' %}bg-red-900/50 text-red-300
-                        {% elif a.action == 'WATCH' %}bg-blue-900/50 text-blue-300
-                        {% else %}bg-gray-700 text-gray-300{% endif %}">{{ a.action or '—' }}</span>
-                </td>
-                <td class="px-4 py-3 text-gray-400">{{ a.confidence or '—' }}</td>
-                <td class="px-4 py-3 text-right text-gray-500 text-xs">${{ "%.3f"|format(a.total_cost_usd) }}</td>
-            </tr>
-        {% endfor %}
-        </tbody>
-    </table>
+<div class="list-section reveal reveal-3" style="margin-top: 0;">
+    {% for a in audits %}
+    <a href="/audit/{{ a.ticker }}/{{ a.audit_date }}" class="list-row" style="text-decoration:none; grid-template-columns: minmax(0,1fr) auto auto auto auto auto auto;">
+        <span class="ticker">
+            {{ a.ticker }}
+            {% if a.is_holding %}
+            <span style="margin-left:var(--s-2); color:var(--brand); font-family:var(--font-mono); font-size:var(--t-meta);">★</span>
+            {% endif %}
+        </span>
+        <span class="meta">{{ a.audit_date }}</span>
+        <span class="meta" style="min-width: 60px; text-align: right;">
+            {% if a.stale_level == 'very_stale' %}
+                <span style="color:var(--fail);">{{ a.age_days }}d ⚠</span>
+            {% elif a.stale_level == 'stale' %}
+                <span style="color:var(--watch);">{{ a.age_days }}d</span>
+            {% else %}
+                <span>{{ a.age_days if a.age_days is not none else '—' }}{% if a.age_days is not none %}d{% endif %}</span>
+            {% endif %}
+        </span>
+        {% if a.action %}
+        <span class="verdict {{ a.action | lower }}">{{ a.action }}</span>
+        {% else %}
+        <span class="meta">—</span>
+        {% endif %}
+        <span class="meta">{{ a.confidence or '—' }}</span>
+        <span class="meta">${{ "%.3f"|format(a.total_cost_usd) }}</span>
+        <span class="arrow">→</span>
+    </a>
+    {% endfor %}
 </div>
 {% else %}
-<p class="text-gray-500 p-4 text-center">还没有 audit。<a href="/audit/new" class="text-gold">跑第一次 audit →</a></p>
+<div class="card reveal reveal-3" style="text-align:center;">
+    <p style="color:var(--fg-2); margin-bottom:var(--s-3);">还没有 audit。</p>
+    <a href="/audit/new" class="btn btn-brand" style="display:inline-flex;">跑第一次 audit →</a>
+</div>
 {% endif %}
+
 {% endblock %}
