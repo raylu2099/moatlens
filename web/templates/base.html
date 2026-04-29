@@ -1,108 +1,109 @@
 <!DOCTYPE html>
-<html lang="zh-CN" class="dark">
+<html lang="zh-CN" data-theme="dark">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{% block title %}Moatlens — Buffett/Munger lens{% endblock %}</title>
-    {# Inline SVG favicon — diamond lozenge in the masthead's oxblood. Avoids
-       a 404 on /favicon.ico without adding a binary asset to the repo. #}
-    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect width='16' height='16' fill='%23f1e9d6'/%3E%3Cpath d='M8 2L13 8L8 14L3 8Z' fill='%237a1e1e'/%3E%3C/svg%3E">
-    <script src="/static/js/theme.js"></script>
 
-    {# Preconnect to Google Fonts so first font request is fast.
-       crossorigin needed for the fonts subdomain to share connection. #}
-    <link rel="preconnect" href="https://fonts.googleapis.com">
+    {# Inline SVG favicon — amber lozenge on the canonical dark bg #}
+    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect width='16' height='16' rx='3' fill='%230a0a0a'/%3E%3Crect x='3' y='3' width='10' height='10' rx='2' fill='%23f59e0b'/%3E%3C/svg%3E">
+
+    {# Read theme from localStorage BEFORE any paint to avoid FOUC. #}
+    <script>
+        (function() {
+            const stored = localStorage.getItem('moatlens-theme');
+            if (stored === 'light' || stored === 'dark') {
+                document.documentElement.dataset.theme = stored;
+            }
+        })();
+    </script>
+
+    {# Preconnect to the Google Fonts mirror so first font request is fast. #}
+    <link rel="preconnect" href="https://fonts.loli.net">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 
-    {# Tailwind layout utilities (compiled locally — see bin/build-css.sh).
-       Editorial layer comes AFTER so it can override color tokens. #}
+    {# Tailwind utility layout (compiled locally — see bin/build-css.sh).
+       modern.css comes AFTER so its tokens override Tailwind colors. #}
     <link rel="stylesheet" href="/static/css/tailwind.min.css">
-    <link rel="stylesheet" href="/static/css/editorial.css">
-
-    <style>
-        /* Form-while-running affordance — kept here, behavioral not stylistic. */
-        form[data-running] button[type=submit] { opacity: 0.6; pointer-events: none; }
-
-        /* SSE live region: visually present but screen-reader friendly */
-        .sr-only {
-            position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
-            overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0;
-        }
-    </style>
+    <link rel="stylesheet" href="/static/css/modern.css">
 </head>
-<body class="min-h-screen">
-    <a href="#main" class="sr-only focus:not-sr-only focus:absolute focus:top-2 focus:left-2 bs-button">跳到主内容</a>
+<body>
+
+    {# Aurora gradient atmosphere — fixed-position, sits behind everything. #}
+    <div class="aurora" aria-hidden="true"></div>
+
+    <a href="#main" class="sr-only">跳到主内容</a>
+
+    <div class="frame">
 
     {# ============================================================
-       Masthead — broadsheet title strip with dateline + nav rules
+       NAV — floating glass bar
        ============================================================ #}
-    <header class="masthead px-6" aria-label="主导航">
-        <div class="max-w-7xl mx-auto">
-            {# Top hairline: dateline + edition info on left, theme toggle on right #}
-            <div class="flex justify-between items-center text-xs"
-                 style="color: var(--ink-faint); padding-bottom: 0.4rem; border-bottom: 1px solid var(--paper-rule); margin-bottom: 0.55rem;">
-                <span class="dateline">
-                    {% if current_date is defined %}{{ current_date }}{% else %}<span id="js-dateline">—</span>{% endif %}
-                    &nbsp;·&nbsp; 第 <span class="mono">VIII</span> 卷 &nbsp;·&nbsp; 自用版
-                </span>
-                <button onclick="window.moatlensToggleTheme()"
-                        data-theme-toggle
-                        aria-label="切换主题"
-                        class="theme-toggle">
-                    <span class="dark:hidden">DAY</span><span class="hidden dark:inline">NIGHT</span>
-                </button>
-            </div>
-
-            {# Title strip: brand on left, nav on right #}
-            <div class="flex items-end justify-between flex-wrap gap-y-2">
-                <a href="/" class="masthead-title" style="text-decoration: none;">
-                    <span class="lozenge" aria-hidden="true">◆</span>Moatlens
-                    <span class="masthead-tag" style="margin-left: 0.6rem;">— a Buffett·Munger reading lens</span>
-                </a>
-                <nav class="masthead-nav" aria-label="主导航">
-                    <a href="/">首页</a>
-                    <a href="/portfolio">持仓</a>
-                    <a href="/history">历史</a>
-                    <a href="/wisdom">智慧</a>
-                    <a href="/learn">概念</a>
-                </nav>
-            </div>
+    <nav class="top" aria-label="主导航">
+        <a class="brand" href="/">
+            <span class="glyph" aria-hidden="true"></span>
+            Moatlens
+        </a>
+        <div class="links">
+            <a href="/" {% if request.url.path == "/" %}class="current"{% endif %}>首页</a>
+            <a href="/portfolio" {% if request.url.path.startswith("/portfolio") %}class="current"{% endif %}>持仓</a>
+            <a href="/history" {% if request.url.path.startswith("/history") %}class="current"{% endif %}>历史</a>
+            <a href="/wisdom" {% if request.url.path.startswith("/wisdom") %}class="current"{% endif %}>智慧</a>
+            <a href="/learn" {% if request.url.path.startswith("/learn") %}class="current"{% endif %}>概念</a>
         </div>
-    </header>
+        <button class="theme-pill" data-theme-toggle aria-label="切换主题">
+            <span data-theme-label>Dark</span>
+        </button>
+    </nav>
 
-    <main id="main" class="max-w-7xl mx-auto px-6 py-10">
+    <main id="main">
         {% block content %}{% endblock %}
     </main>
 
     {# ============================================================
-       Colophon footer — like a 19th-century imprint line
+       FOOTER — minimal colophon
        ============================================================ #}
-    <footer class="colophon px-6">
-        <div class="max-w-7xl mx-auto">
-            <span style="font-family: var(--font-display); font-style: italic; font-weight: 700; color: var(--ink);">Moatlens</span>
-            <span class="ornament">◆</span>
-            individuum cogitans
-            <span class="ornament">◆</span>
-            <span style="font-style: normal;">个人思考工具，不构成投资建议</span>
-            <br>
-            <span style="font-size: 0.75rem; opacity: 0.7;">
-                Set in Bodoni Moda &amp; Source Serif &middot; bound at 127.0.0.1
-            </span>
-        </div>
+    <footer class="colophon">
+        <span>Moatlens v0.7 — individuum cogitans</span>
+        <span>127.0.0.1 · self-use</span>
     </footer>
 
+    </div>
+
+    {# ============================================================
+       Scripts
+       ============================================================ #}
     <script>
-        // Lightweight client-side dateline so the masthead always shows today's
-        // date without server-side plumbing on every route. Format: "12 March, 2026".
+        // Theme toggle — single source of truth, persists in localStorage.
+        // Replaces the old theme.js Tailwind dark-class logic.
         (function() {
-            const el = document.getElementById('js-dateline');
-            if (!el) return;
-            const months = ['January','February','March','April','May','June',
-                            'July','August','September','October','November','December'];
-            const d = new Date();
-            el.textContent = `${d.getDate()} ${months[d.getMonth()]}, ${d.getFullYear()}`;
+            const root = document.documentElement;
+            if (!root.dataset.theme) root.dataset.theme = 'dark';
+
+            const update = () => {
+                document.querySelectorAll('[data-theme-label]').forEach(el => {
+                    el.textContent = root.dataset.theme === 'dark' ? 'Dark' : 'Light';
+                });
+            };
+            update();
+
+            document.querySelectorAll('[data-theme-toggle]').forEach(btn => {
+                btn.addEventListener('click', () => {
+                    root.dataset.theme = root.dataset.theme === 'dark' ? 'light' : 'dark';
+                    localStorage.setItem('moatlens-theme', root.dataset.theme);
+                    update();
+                });
+            });
+
+            // Pause aurora animation when tab is backgrounded — saves GPU
+            // on machines that throttle background pages anyway.
+            document.addEventListener('visibilitychange', () => {
+                if (document.hidden) document.body.dataset.bgPaused = '1';
+                else delete document.body.dataset.bgPaused;
+            });
         })();
     </script>
+    {# icons.js still needed by ask/session.html until Phase 3 migrates it #}
     <script src="/static/js/icons.js"></script>
     {% block scripts %}{% endblock %}
 </body>

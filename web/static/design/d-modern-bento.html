@@ -1,0 +1,733 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>D · Modern Bento · Moatlens</title>
+    <link rel="preconnect" href="https://fonts.loli.net">
+    <link href="https://fonts.loli.net/css2?family=Inter:wght@400;500;600;700;800&family=Inter+Tight:wght@500;600;700;800&family=JetBrains+Mono:wght@400;500&family=Noto+Sans+SC:wght@400;500;700;800&display=swap" rel="stylesheet">
+    <style>
+        /* ==========================================================
+           MODERN BENTO — design system
+           Inspired by current 2025-26 product design language
+           (Linear / Vercel / Arc / Anthropic / Stripe Atlas).
+
+           Principles:
+           - White space is the design (≥96px between sections)
+           - Limited type scale (5 sizes, no in-betweens)
+           - Single brand accent (warm amber); pass/fail are muted
+           - No borders. Depth comes from subtle bg elevation
+             and a soft aurora gradient atmosphere.
+           - Bento grid: 3 modes, weighted by importance, varied
+             sizes inside one cohesive grid.
+           - One choreographed reveal on load. Hover ≤ 200ms.
+           ========================================================== */
+
+        :root {
+            /* DARK is canonical (most modern products ship this way) */
+            --bg:        #0a0a0a;
+            --bg-1:      #111111;     /* card resting */
+            --bg-2:      #1a1a1a;     /* card hover */
+            --line:      rgba(255,255,255,0.06);
+
+            --fg:        #f5f5f5;
+            --fg-2:      #a1a1a1;
+            --fg-3:      #525252;
+            --fg-4:      #2e2e2e;
+
+            --brand:     #f59e0b;     /* warm amber — the only brand color */
+            --brand-2:   #fb923c;     /* aurora secondary */
+            --pass:      #4ade80;
+            --fail:      #f87171;
+            --watch:     #fbbf24;
+
+            /* Type system — 5 sizes only */
+            --t-display: clamp(3rem, 7vw, 6rem);
+            --t-h2:      2rem;
+            --t-h3:      1.25rem;
+            --t-body:    1rem;
+            --t-meta:    0.8125rem;
+
+            /* Spacing scale */
+            --s-1: 4px;  --s-2: 8px;  --s-3: 16px;
+            --s-4: 24px; --s-5: 32px; --s-6: 48px;
+            --s-7: 64px; --s-8: 96px; --s-9: 128px;
+
+            --font-sans:    'Inter', 'Noto Sans SC', -apple-system, sans-serif;
+            --font-display: 'Inter Tight', 'Inter', 'Noto Sans SC', sans-serif;
+            --font-mono:    'JetBrains Mono', 'SF Mono', monospace;
+
+            --radius-sm:  10px;
+            --radius:     20px;
+            --radius-lg:  28px;
+        }
+
+        /* Light mode (data-theme=light on <html>) */
+        html[data-theme="light"] {
+            --bg:    #fafaf9;
+            --bg-1:  #ffffff;
+            --bg-2:  #f5f5f4;
+            --line:  rgba(0,0,0,0.06);
+            --fg:    #0a0a0a;
+            --fg-2:  #525252;
+            --fg-3:  #a3a3a3;
+            --fg-4:  #e7e5e4;
+        }
+
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        html, body { background: var(--bg); color: var(--fg); }
+        body {
+            font-family: var(--font-sans);
+            font-size: var(--t-body);
+            line-height: 1.55;
+            -webkit-font-smoothing: antialiased;
+            -moz-osx-font-smoothing: grayscale;
+            font-feature-settings: "ss01", "cv11", "tnum" off;
+            min-height: 100vh;
+            overflow-x: hidden;
+            position: relative;
+        }
+        ::selection { background: var(--brand); color: var(--bg); }
+
+        a { color: inherit; text-decoration: none; }
+        button { font: inherit; }
+
+        /* ==========================================================
+           AURORA — soft warm bleed behind the hero, sets atmosphere
+           ========================================================== */
+        .aurora {
+            position: fixed;
+            inset: 0;
+            z-index: 0;
+            pointer-events: none;
+            overflow: hidden;
+        }
+        .aurora::before, .aurora::after {
+            content: "";
+            position: absolute;
+            border-radius: 50%;
+            filter: blur(120px);
+            opacity: 0.55;
+            animation: drift 22s ease-in-out infinite alternate;
+        }
+        .aurora::before {
+            width: 65vw; height: 65vw;
+            top: -22vw; left: -10vw;
+            background: var(--brand);
+            opacity: 0.18;
+        }
+        .aurora::after {
+            width: 50vw; height: 50vw;
+            top: -8vw; right: -15vw;
+            background: var(--brand-2);
+            opacity: 0.12;
+            animation-duration: 28s;
+            animation-direction: alternate-reverse;
+        }
+        html[data-theme="light"] .aurora::before { opacity: 0.22; }
+        html[data-theme="light"] .aurora::after  { opacity: 0.18; }
+
+        @keyframes drift {
+            0%   { transform: translate3d(0, 0, 0) scale(1); }
+            100% { transform: translate3d(4vw, 3vw, 0) scale(1.08); }
+        }
+        @media (prefers-reduced-motion: reduce) {
+            .aurora::before, .aurora::after { animation: none; }
+        }
+
+        /* Subtle warm noise grain — softens flat bg */
+        body::after {
+            content: "";
+            position: fixed;
+            inset: 0;
+            z-index: 1;
+            pointer-events: none;
+            opacity: 0.04;
+            background-image:
+                url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='200' height='200'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>");
+        }
+
+        .frame {
+            position: relative;
+            z-index: 2;
+        }
+
+        /* ==========================================================
+           NAV — floating glass strip, minimal
+           ========================================================== */
+        nav.top {
+            position: sticky; top: 0; z-index: 10;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: var(--s-4) var(--s-6);
+            backdrop-filter: blur(14px) saturate(140%);
+            -webkit-backdrop-filter: blur(14px) saturate(140%);
+            background: color-mix(in srgb, var(--bg) 65%, transparent);
+            border-bottom: 1px solid var(--line);
+        }
+        .brand {
+            display: flex; align-items: center; gap: var(--s-2);
+            font-family: var(--font-display);
+            font-weight: 700;
+            font-size: 1.05rem;
+            letter-spacing: -0.025em;
+        }
+        .brand .glyph {
+            width: 22px; height: 22px;
+            border-radius: 6px;
+            background: linear-gradient(135deg, var(--brand), var(--brand-2));
+            display: inline-block;
+        }
+        nav.top .links {
+            display: flex; gap: var(--s-5);
+            font-size: var(--t-meta);
+            color: var(--fg-2);
+            font-weight: 500;
+        }
+        nav.top .links a { transition: color 200ms ease; }
+        nav.top .links a:hover { color: var(--fg); }
+
+        .theme-pill {
+            background: var(--bg-1);
+            border: 1px solid var(--line);
+            color: var(--fg-2);
+            padding: var(--s-2) var(--s-3);
+            border-radius: 999px;
+            font-size: 0.75rem;
+            font-family: var(--font-mono);
+            cursor: pointer;
+            transition: all 200ms ease;
+        }
+        .theme-pill:hover { color: var(--fg); border-color: var(--fg-3); }
+
+        /* ==========================================================
+           HERO
+           ========================================================== */
+        main { max-width: 1200px; margin: 0 auto; padding: var(--s-9) var(--s-6); }
+
+        .hero {
+            padding: var(--s-7) 0 var(--s-9);
+            text-align: left;
+            max-width: 980px;
+        }
+        .hero .eyebrow {
+            display: inline-flex; align-items: center; gap: var(--s-2);
+            background: var(--bg-1);
+            border: 1px solid var(--line);
+            color: var(--fg-2);
+            padding: var(--s-2) var(--s-3);
+            border-radius: 999px;
+            font-size: 0.78rem;
+            font-weight: 500;
+            margin-bottom: var(--s-5);
+        }
+        .hero .eyebrow .pulse {
+            width: 6px; height: 6px;
+            border-radius: 50%;
+            background: var(--pass);
+            box-shadow: 0 0 10px var(--pass);
+        }
+        .hero h1 {
+            font-family: var(--font-display);
+            font-size: var(--t-display);
+            line-height: 0.95;
+            letter-spacing: -0.045em;
+            font-weight: 700;
+            margin-bottom: var(--s-4);
+            color: var(--fg);
+        }
+        .hero h1 .accent {
+            background: linear-gradient(120deg, var(--brand), var(--brand-2));
+            -webkit-background-clip: text; background-clip: text;
+            -webkit-text-fill-color: transparent;
+            font-style: italic;
+            font-weight: 800;
+        }
+        .hero p.sub {
+            font-size: 1.125rem;
+            line-height: 1.5;
+            color: var(--fg-2);
+            max-width: 36em;
+        }
+
+        /* ==========================================================
+           BENTO GRID — 3 modes, varied weights
+           ========================================================== */
+        .bento {
+            display: grid;
+            grid-template-columns: 1.4fr 1fr;
+            grid-template-rows: auto auto;
+            gap: var(--s-3);
+            margin-top: var(--s-6);
+        }
+        @media (max-width: 800px) {
+            .bento { grid-template-columns: 1fr; }
+        }
+
+        .card {
+            background: var(--bg-1);
+            border: 1px solid var(--line);
+            border-radius: var(--radius);
+            padding: var(--s-6);
+            display: flex;
+            flex-direction: column;
+            transition: transform 280ms cubic-bezier(0.2, 0.7, 0.2, 1),
+                        background 200ms ease,
+                        border-color 200ms ease;
+            position: relative;
+            overflow: hidden;
+        }
+        .card:hover {
+            background: var(--bg-2);
+            border-color: var(--fg-4);
+            transform: translateY(-2px);
+        }
+
+        /* Card I — Ask, top-left, hero of the row */
+        .card-ask {
+            grid-column: 1; grid-row: 1;
+            min-height: 320px;
+        }
+        .card-ask::before {
+            content: "";
+            position: absolute;
+            inset: 0;
+            background: radial-gradient(circle at 110% 110%,
+                color-mix(in srgb, var(--brand) 14%, transparent) 0%,
+                transparent 55%);
+            pointer-events: none;
+        }
+
+        /* Card III — Briefing, top-right, smaller */
+        .card-brief {
+            grid-column: 2; grid-row: 1 / span 2;
+            min-height: 100%;
+        }
+
+        /* Card II — Chat, full bottom row, the heroic mode */
+        .card-chat {
+            grid-column: 1; grid-row: 2;
+            min-height: 240px;
+        }
+
+        @media (max-width: 800px) {
+            .card-ask, .card-chat, .card-brief {
+                grid-column: 1; grid-row: auto;
+            }
+        }
+
+        .card .num {
+            font-family: var(--font-mono);
+            font-size: 0.72rem;
+            color: var(--fg-3);
+            letter-spacing: 0.08em;
+            margin-bottom: var(--s-4);
+            display: flex;
+            justify-content: space-between;
+        }
+        .card .glyph-mode {
+            width: 28px; height: 28px;
+            border-radius: 8px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            font-family: var(--font-display);
+            font-size: 12px;
+            font-weight: 700;
+            color: var(--bg);
+            margin-bottom: var(--s-4);
+        }
+        .card-ask  .glyph-mode { background: linear-gradient(135deg, var(--brand), var(--brand-2)); }
+        .card-chat .glyph-mode { background: linear-gradient(135deg, #818cf8, #6366f1); color: #fff; }
+        .card-brief .glyph-mode{ background: linear-gradient(135deg, #34d399, #059669); color: #fff; }
+
+        .card h2 {
+            font-family: var(--font-display);
+            font-size: var(--t-h2);
+            line-height: 1.05;
+            letter-spacing: -0.03em;
+            font-weight: 700;
+            color: var(--fg);
+            margin-bottom: var(--s-2);
+        }
+        .card .latin {
+            font-size: var(--t-meta);
+            color: var(--fg-3);
+            margin-bottom: var(--s-4);
+            font-weight: 500;
+        }
+        .card p.lede {
+            font-size: 0.96rem;
+            color: var(--fg-2);
+            line-height: 1.55;
+            margin-bottom: auto;          /* push CTA / form to bottom */
+            max-width: 32em;
+        }
+
+        /* Card form — pill input + ghost button */
+        .card form {
+            display: flex; gap: var(--s-2);
+            margin-top: var(--s-5);
+        }
+        .card input {
+            flex: 1;
+            background: var(--bg);
+            border: 1px solid var(--line);
+            color: var(--fg);
+            font-family: var(--font-sans);
+            font-size: 0.92rem;
+            padding: 0 var(--s-4);
+            height: 44px;
+            border-radius: 12px;
+            outline: none;
+            transition: border-color 200ms ease, background 200ms ease;
+        }
+        .card input::placeholder { color: var(--fg-3); }
+        .card input:focus { border-color: var(--brand); background: var(--bg-2); }
+        .card button {
+            background: var(--fg);
+            color: var(--bg);
+            border: none;
+            font-size: 0.92rem;
+            font-weight: 600;
+            padding: 0 var(--s-4);
+            height: 44px;
+            border-radius: 12px;
+            cursor: pointer;
+            transition: opacity 200ms ease, transform 200ms ease;
+        }
+        .card button:hover { opacity: 0.88; transform: scale(1.02); }
+        .card-ask  button { background: var(--brand); color: var(--bg); }
+
+        .card .examples {
+            margin-top: var(--s-3);
+            font-size: var(--t-meta);
+            color: var(--fg-3);
+        }
+        .card .examples a {
+            color: var(--fg-2);
+            margin: 0 var(--s-1);
+            transition: color 200ms ease;
+        }
+        .card .examples a:hover { color: var(--brand); }
+
+        /* Briefing card has list of alerts + CTA */
+        .card-brief ul {
+            list-style: none;
+            margin-top: var(--s-4);
+            margin-bottom: var(--s-4);
+        }
+        .card-brief li {
+            display: flex; align-items: flex-start; gap: var(--s-3);
+            padding: var(--s-3) 0;
+            border-top: 1px solid var(--line);
+            font-size: 0.9rem;
+            color: var(--fg-2);
+            line-height: 1.5;
+        }
+        .card-brief li:first-child { border-top: none; padding-top: 0; }
+        .card-brief li .dot {
+            width: 6px; height: 6px;
+            border-radius: 50%;
+            margin-top: 7px;
+            flex-shrink: 0;
+        }
+        .card-brief li .dot.steady  { background: var(--pass); box-shadow: 0 0 8px color-mix(in srgb, var(--pass) 50%, transparent); }
+        .card-brief li .dot.review  { background: var(--watch); box-shadow: 0 0 8px color-mix(in srgb, var(--watch) 50%, transparent); }
+        .card-brief li .dot.event   { background: var(--brand-2); box-shadow: 0 0 8px color-mix(in srgb, var(--brand-2) 50%, transparent); }
+        .card-brief .cta {
+            display: inline-flex;
+            align-items: center;
+            gap: var(--s-2);
+            margin-top: auto;
+            color: var(--fg);
+            font-weight: 600;
+            font-size: 0.92rem;
+            padding: var(--s-3) 0;
+            border-bottom: 1px solid var(--line);
+            transition: gap 200ms ease, border-color 200ms ease;
+        }
+        .card-brief .cta:hover { gap: var(--s-3); border-bottom-color: var(--brand); }
+
+        /* ==========================================================
+           QUOTE — single big italic line, plenty of air
+           ========================================================== */
+        .quote {
+            margin: var(--s-9) 0;
+            padding: var(--s-7) 0;
+            text-align: left;
+            max-width: 920px;
+        }
+        .quote .label {
+            font-family: var(--font-mono);
+            font-size: var(--t-meta);
+            color: var(--brand);
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+            margin-bottom: var(--s-4);
+        }
+        .quote blockquote {
+            font-family: var(--font-display);
+            font-size: clamp(1.5rem, 3vw, 2.25rem);
+            line-height: 1.25;
+            letter-spacing: -0.02em;
+            font-weight: 500;
+            color: var(--fg);
+            margin-bottom: var(--s-4);
+        }
+        .quote blockquote em {
+            font-style: italic;
+            color: var(--brand);
+        }
+        .quote cite {
+            font-style: normal;
+            font-size: var(--t-meta);
+            color: var(--fg-2);
+            font-family: var(--font-mono);
+        }
+
+        /* ==========================================================
+           RECENT — minimal list, plenty of air per row
+           ========================================================== */
+        .recent { margin-top: var(--s-9); }
+        .recent .header {
+            display: flex; justify-content: space-between; align-items: baseline;
+            margin-bottom: var(--s-5);
+        }
+        .recent h3 {
+            font-family: var(--font-display);
+            font-size: var(--t-h3);
+            font-weight: 700;
+            letter-spacing: -0.02em;
+        }
+        .recent .header a {
+            font-size: var(--t-meta);
+            color: var(--fg-2);
+            transition: color 200ms ease;
+        }
+        .recent .header a:hover { color: var(--brand); }
+
+        .recent-row {
+            display: grid;
+            grid-template-columns: 1fr auto auto auto;
+            gap: var(--s-5);
+            align-items: center;
+            padding: var(--s-4) 0;
+            border-top: 1px solid var(--line);
+            transition: padding-left 200ms ease;
+            cursor: pointer;
+        }
+        .recent-row:hover { padding-left: var(--s-3); }
+        .recent-row .ticker {
+            font-family: var(--font-display);
+            font-weight: 700;
+            font-size: 1.125rem;
+            letter-spacing: -0.02em;
+        }
+        .recent-row .meta {
+            font-family: var(--font-mono);
+            font-size: var(--t-meta);
+            color: var(--fg-3);
+        }
+        .recent-row .verdict {
+            display: inline-flex; align-items: center; gap: var(--s-2);
+            font-size: var(--t-meta);
+            color: var(--fg-2);
+            font-weight: 500;
+        }
+        .recent-row .verdict::before {
+            content: "";
+            width: 8px; height: 8px;
+            border-radius: 50%;
+            background: var(--fg-3);
+        }
+        .recent-row .verdict.buy   { color: var(--pass); }
+        .recent-row .verdict.buy::before   { background: var(--pass); box-shadow: 0 0 8px color-mix(in srgb, var(--pass) 50%, transparent); }
+        .recent-row .verdict.avoid { color: var(--fail); }
+        .recent-row .verdict.avoid::before { background: var(--fail); box-shadow: 0 0 8px color-mix(in srgb, var(--fail) 50%, transparent); }
+        .recent-row .verdict.watch { color: var(--watch); }
+        .recent-row .verdict.watch::before { background: var(--watch); box-shadow: 0 0 8px color-mix(in srgb, var(--watch) 50%, transparent); }
+        .recent-row .arrow {
+            color: var(--fg-3);
+            transition: transform 200ms ease, color 200ms ease;
+        }
+        .recent-row:hover .arrow { color: var(--brand); transform: translateX(4px); }
+
+        /* ==========================================================
+           FOOTER
+           ========================================================== */
+        footer {
+            margin-top: var(--s-9);
+            padding: var(--s-7) var(--s-6);
+            border-top: 1px solid var(--line);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-size: var(--t-meta);
+            color: var(--fg-3);
+            font-family: var(--font-mono);
+        }
+
+        /* ==========================================================
+           Choreographed reveal on load
+           ========================================================== */
+        .reveal {
+            opacity: 0;
+            transform: translateY(12px);
+            animation: rise 700ms cubic-bezier(0.2, 0.7, 0.2, 1) forwards;
+        }
+        .reveal-1 { animation-delay: 80ms; }
+        .reveal-2 { animation-delay: 200ms; }
+        .reveal-3 { animation-delay: 340ms; }
+        .reveal-4 { animation-delay: 480ms; }
+        .reveal-5 { animation-delay: 620ms; }
+        @keyframes rise { to { opacity: 1; transform: none; } }
+        @media (prefers-reduced-motion: reduce) {
+            .reveal { opacity: 1; transform: none; animation: none; }
+        }
+    </style>
+</head>
+<body>
+
+<div class="aurora" aria-hidden="true"></div>
+
+<div class="frame">
+
+<nav class="top reveal reveal-1">
+    <a class="brand" href="/">
+        <span class="glyph" aria-hidden="true"></span>
+        Moatlens
+    </a>
+    <div class="links">
+        <a>Home</a>
+        <a>Portfolio</a>
+        <a>History</a>
+        <a>Wisdom</a>
+        <a>Concepts</a>
+    </div>
+    <button class="theme-pill" onclick="document.documentElement.dataset.theme = document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark'">
+        <span data-theme-label>Dark</span>
+    </button>
+</nav>
+
+<main>
+
+    <section class="hero reveal reveal-2">
+        <div class="eyebrow">
+            <span class="pulse" aria-hidden="true"></span>
+            <span>2026.04.29 · v0.7 · cache 87%</span>
+        </div>
+        <h1>慢一点，<span class="accent">读久一点</span>。<br>一根 K 线决定不了，<br>一家公司值不值得。</h1>
+        <p class="sub">Buffett · Munger · Marks · Graham 的镜子下看一家公司——八步审视，分块读，留笔记。</p>
+    </section>
+
+    <section class="bento">
+
+        <div class="card card-ask reveal reveal-3">
+            <div class="num"><span>I · QUICK READ</span><span>30s</span></div>
+            <div class="glyph-mode">▲</div>
+            <h2>快问快答</h2>
+            <div class="latin">Ask, get one answer.</div>
+            <p class="lede">自然语言提问或输入 ticker，立得分块答案 + 大师语录引用。按问题意图只跑相关 stage，省钱。</p>
+            <form>
+                <input placeholder="AAPL 值得买吗？">
+                <button type="button">Ask</button>
+            </form>
+            <div class="examples">
+                Try → <a>AAPL 值得买吗？</a> · <a>TSLA 管理层</a>
+            </div>
+        </div>
+
+        <div class="card card-brief reveal reveal-4">
+            <div class="num"><span>III · DAILY</span><span>每日</span></div>
+            <div class="glyph-mode">●</div>
+            <h2>投资秘书</h2>
+            <div class="latin">Open. See the book.</div>
+            <p class="lede">打开就看你的持仓状态 + 今日提醒 + 季度复盘纪律。</p>
+            <ul>
+                <li><span class="dot steady"></span><span>AAPL Z-score 11.0 → 10.6，仍稳健</span></li>
+                <li><span class="dot review"></span><span>NVDA 距上次审视 91 天，建议复审</span></li>
+                <li><span class="dot event"></span><span>MSFT 财报 5 天后</span></li>
+            </ul>
+            <a href="/portfolio" class="cta">Open briefing →</a>
+        </div>
+
+        <div class="card card-chat reveal reveal-4">
+            <div class="num"><span>II · GUIDED</span><span>3-5 min</span></div>
+            <div class="glyph-mode">■</div>
+            <h2>教练模式</h2>
+            <div class="latin">A coach walking you through eight stages.</div>
+            <p class="lede">像私人教练陪你边审视边聊，每个 stage 后大师语录 + Munger 反问。最适合学习与反复咀嚼。</p>
+            <form>
+                <input placeholder="AAPL  /  审视 NVDA">
+                <button type="button">Start</button>
+            </form>
+            <div class="examples">
+                Try → <a>NVDA</a> · <a>BRK.B</a> · <a>MSFT</a>
+            </div>
+        </div>
+
+    </section>
+
+    <section class="quote reveal reveal-5">
+        <div class="label">Daily reading</div>
+        <blockquote>
+            <em>"</em>这是家好公司，所有人都以为它伟大——它不是。所以股票被高估了，卖。<em>"</em>
+        </blockquote>
+        <cite>Howard Marks · The Most Important Thing</cite>
+    </section>
+
+    <section class="recent reveal reveal-5">
+        <div class="header">
+            <h3>Recent audits</h3>
+            <a href="/history">View all 12 →</a>
+        </div>
+        <div class="recent-row">
+            <span class="ticker">AAPL</span>
+            <span class="meta">2026-04-26</span>
+            <span class="verdict avoid">AVOID</span>
+            <span class="arrow">→</span>
+        </div>
+        <div class="recent-row">
+            <span class="ticker">NVDA</span>
+            <span class="meta">2026-04-25</span>
+            <span class="verdict watch">WATCH</span>
+            <span class="arrow">→</span>
+        </div>
+        <div class="recent-row">
+            <span class="ticker">BRK.B</span>
+            <span class="meta">2026-04-22</span>
+            <span class="verdict buy">BUY</span>
+            <span class="arrow">→</span>
+        </div>
+    </section>
+
+</main>
+
+<footer>
+    <span>Moatlens v0.7 — individuum cogitans</span>
+    <span>127.0.0.1 · self-use</span>
+</footer>
+
+</div>
+
+<script>
+    // Theme toggle persists in localStorage so the page remembers next visit.
+    const root = document.documentElement;
+    const stored = localStorage.getItem('moatlens-theme');
+    if (stored) root.dataset.theme = stored;
+
+    const pill = document.querySelector('.theme-pill');
+    const label = pill.querySelector('[data-theme-label]');
+    const update = () => label.textContent = root.dataset.theme === 'dark' ? 'Dark' : 'Light';
+    update();
+    pill.addEventListener('click', () => {
+        root.dataset.theme = root.dataset.theme === 'dark' ? 'light' : 'dark';
+        localStorage.setItem('moatlens-theme', root.dataset.theme);
+        update();
+    });
+</script>
+
+</body>
+</html>
