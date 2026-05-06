@@ -213,13 +213,21 @@ def _any_ticker_dir_changed_after(root: Path, after_mtime: float) -> bool:
     O(number_of_ticker_dirs) stat calls — typically <50, independent of the
     number of audits. Compare against O(audits) calls if we stat every
     indexed row.
+
+    Use `>=` not `>`: filesystem mtime is often second-precision (ext4 with
+    default mount opts, tmpfs). When save_audit and a subsequent unlink
+    land in the same second, the strict `>` comparison would miss the
+    change and serve a stale index — tests/test_storage_and_diff.py::
+    test_list_audits_rebuilds_when_json_deleted caught this regression.
+    Tolerating one extra revalidate when mtimes tie is cheap; serving
+    stale data after a JSON deletion is a correctness bug.
     """
     try:
         for entry in root.iterdir():
             if not entry.is_dir():
                 continue
             try:
-                if entry.stat().st_mtime > after_mtime:
+                if entry.stat().st_mtime >= after_mtime:
                     return True
             except OSError:
                 return True  # entry vanished mid-iter → something changed
