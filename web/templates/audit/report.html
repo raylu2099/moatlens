@@ -2,144 +2,193 @@
 {% block title %}{{ ticker }} 审视 — {{ date }} — Moatlens{% endblock %}
 {% block content %}
 
-<div class="flex justify-between items-start mb-6">
+{# ============================================================
+   HEADER — ticker + verdict stamp + cost meta
+   ============================================================ #}
+<section class="reveal reveal-1" style="display:flex; justify-content:space-between; align-items:flex-start; gap:var(--s-5); margin-bottom:var(--s-6); flex-wrap:wrap;">
     <div>
-        <h1 class="text-3xl font-bold">
-            {{ report.company_name }} <span class="text-gold">{{ ticker }}</span>
-            {% if is_holding %}<span class="text-xs align-middle ml-2 text-gold">★ 持仓</span>{% endif %}
-        </h1>
-        <p class="text-sm text-gray-500">{{ date }} · 生成于 {{ report.generated_at.strftime('%H:%M') }}</p>
+        <div style="display:flex; align-items:baseline; gap:var(--s-3); flex-wrap:wrap;">
+            <h1 style="font-family:var(--font-display); font-size:clamp(1.75rem, 4vw, 2.75rem); font-weight:800; letter-spacing:-0.035em; color:var(--fg);">
+                {{ report.company_name }}
+            </h1>
+            <span style="font-family:var(--font-mono); font-size:1.25rem; color:var(--brand); font-weight:700;">{{ ticker }}</span>
+            {% if is_holding %}
+            <span style="font-size:var(--t-meta); color:var(--brand); font-family:var(--font-mono); padding:0.15em 0.7em; border:1px solid var(--brand); border-radius:var(--radius-pill);">★ 持仓</span>
+            {% endif %}
+        </div>
+        <div style="font-family:var(--font-mono); font-size:var(--t-meta); color:var(--fg-3); margin-top:var(--s-2);">
+            {{ date }} · 生成于 {{ report.generated_at.strftime('%H:%M') }}
+        </div>
     </div>
-    <div class="text-right">
-        <span class="inline-block px-3 py-1 rounded font-bold
-            {% if report.overall_action.value == 'BUY' %}bg-green-900/50 text-green-300
-            {% elif report.overall_action.value == 'AVOID' %}bg-red-900/50 text-red-300
-            {% elif report.overall_action.value == 'WATCH' %}bg-blue-900/50 text-blue-300
-            {% else %}bg-gray-700 text-gray-300{% endif %}">
-            {{ report.overall_action.value if report.overall_action else 'PENDING' }}
-        </span>
-        <div class="text-xs text-gray-500 mt-1">置信度 {{ report.overall_confidence.value if report.overall_confidence else '?' }}</div>
-        <div class="text-xs text-gray-600 mt-1">API 成本 ${{ "%.3f"|format(report.total_api_cost_usd) }}</div>
-    </div>
-</div>
 
+    <div style="text-align:right;">
+        {% if report.overall_action %}
+        <div style="display:inline-flex; align-items:center; gap:var(--s-2);">
+            <span class="dot {% if report.overall_action.value == 'BUY' %}pass{% elif report.overall_action.value == 'AVOID' %}fail{% elif report.overall_action.value == 'WATCH' %}watch{% else %}skip{% endif %}" style="width:14px; height:14px;"></span>
+            <span style="font-family:var(--font-display); font-size:1.5rem; font-weight:800; letter-spacing:-0.02em; color:var(--fg);">
+                {{ report.overall_action.value }}
+            </span>
+        </div>
+        {% else %}
+        <span style="font-family:var(--font-mono); color:var(--fg-3);">PENDING</span>
+        {% endif %}
+        <div style="font-family:var(--font-mono); font-size:var(--t-meta); color:var(--fg-3); margin-top:var(--s-2);">
+            置信度 {{ report.overall_confidence.value if report.overall_confidence else '?' }}
+            <br>
+            API ${{ "%.3f"|format(report.total_api_cost_usd) }}
+        </div>
+    </div>
+</section>
+
+{# ============================================================
+   ANCHOR THESIS + variant view
+   ============================================================ #}
 {% if report.anchor_thesis %}
-<blockquote class="border-l-4 border-gold bg-ink-800 pl-4 pr-4 py-3 mb-3 text-gray-300">
-    <strong class="text-gold">你的初始论点:</strong> {{ report.anchor_thesis }}
-</blockquote>
+<div class="reveal reveal-2" style="background:var(--bg-1); border:1px solid var(--line); border-left:3px solid var(--brand); border-radius:var(--radius-sm); padding:var(--s-3) var(--s-4); margin-bottom:var(--s-3);">
+    <div style="font-size:var(--t-meta); color:var(--brand); font-family:var(--font-mono); text-transform:uppercase; letter-spacing:0.08em; margin-bottom:var(--s-2);">你的初始论点</div>
+    <p style="color:var(--fg); line-height:1.6;">{{ report.anchor_thesis }}</p>
+</div>
 {% endif %}
 
 {% if report.my_market_expectation or report.my_variant_view %}
-<div class="grid md:grid-cols-2 gap-3 mb-6">
+<section class="reveal reveal-2" style="display:grid; grid-template-columns:repeat(auto-fit, minmax(280px, 1fr)); gap:var(--s-3); margin-bottom:var(--s-6);">
     {% if report.my_market_expectation %}
-    <div class="bg-ink-800 border border-ink-700 rounded p-4">
-        <div class="text-xs text-gray-500 mb-1">市场 price in 的是:</div>
-        <p class="text-sm text-gray-300">{{ report.my_market_expectation }}</p>
+    <div class="card" style="padding:var(--s-4);">
+        <div style="font-size:var(--t-meta); color:var(--fg-3); font-family:var(--font-mono); text-transform:uppercase; letter-spacing:0.08em; margin-bottom:var(--s-2);">市场 price in 的是</div>
+        <p style="color:var(--fg-2); font-size:0.96rem; line-height:1.55;">{{ report.my_market_expectation }}</p>
     </div>
     {% endif %}
     {% if report.my_variant_view %}
-    <div class="bg-ink-800 border border-gold/40 rounded p-4">
-        <div class="text-xs text-gold mb-1">你的 variant view:</div>
-        <p class="text-sm text-gray-100">{{ report.my_variant_view }}</p>
+    <div class="card" style="padding:var(--s-4); border-color:color-mix(in srgb, var(--brand) 30%, var(--line));">
+        <div style="font-size:var(--t-meta); color:var(--brand); font-family:var(--font-mono); text-transform:uppercase; letter-spacing:0.08em; margin-bottom:var(--s-2);">你的 variant view</div>
+        <p style="color:var(--fg); font-size:0.96rem; line-height:1.55;">{{ report.my_variant_view }}</p>
     </div>
     {% endif %}
-</div>
+</section>
 {% endif %}
 
 {% if diff_html %}
-{{ diff_html | safe }}
+<div class="reveal reveal-3">
+    {{ diff_html | safe }}
+</div>
 {% endif %}
 
+{# ============================================================
+   THESIS / position guidance — large numeric callout
+   ============================================================ #}
 {% if report.thesis %}
-<div class="bg-ink-800 border border-ink-700 rounded-lg p-5 mb-6">
-    <h3 class="text-lg font-semibold text-gold mb-3">💼 持仓建议</h3>
-    <div class="grid md:grid-cols-3 gap-4 text-sm">
+<section class="card reveal reveal-3" style="margin-bottom:var(--s-6); padding:var(--s-5) var(--s-6);">
+    <div style="font-size:var(--t-meta); color:var(--brand); font-family:var(--font-mono); text-transform:uppercase; letter-spacing:0.08em; margin-bottom:var(--s-4);">持仓建议 · Position Guidance</div>
+    <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(160px, 1fr)); gap:var(--s-5);">
         {% if report.thesis.entry_price %}
         <div>
-            <div class="text-gray-500">当前价</div>
-            <div class="text-xl font-bold">${{ "%.2f"|format(report.thesis.entry_price) }}</div>
+            <div style="font-size:var(--t-meta); color:var(--fg-3); margin-bottom:var(--s-1);">当前价</div>
+            <div style="font-family:var(--font-display); font-size:1.75rem; font-weight:700; letter-spacing:-0.02em; color:var(--fg); font-feature-settings:'tnum' 1;">${{ "%.2f"|format(report.thesis.entry_price) }}</div>
         </div>
         {% endif %}
         {% if report.thesis.target_buy_price %}
         <div>
-            <div class="text-gray-500">🟢 理想买入</div>
-            <div class="text-xl font-bold text-green-400">≤ ${{ "%.2f"|format(report.thesis.target_buy_price) }}</div>
+            <div style="font-size:var(--t-meta); color:var(--fg-3); margin-bottom:var(--s-1);">理想买入</div>
+            <div style="font-family:var(--font-display); font-size:1.75rem; font-weight:700; letter-spacing:-0.02em; color:var(--pass); font-feature-settings:'tnum' 1;">≤ ${{ "%.2f"|format(report.thesis.target_buy_price) }}</div>
         </div>
         {% endif %}
         {% if report.thesis.target_sell_price %}
         <div>
-            <div class="text-gray-500">🔴 开始减仓</div>
-            <div class="text-xl font-bold text-red-400">≥ ${{ "%.2f"|format(report.thesis.target_sell_price) }}</div>
+            <div style="font-size:var(--t-meta); color:var(--fg-3); margin-bottom:var(--s-1);">开始减仓</div>
+            <div style="font-family:var(--font-display); font-size:1.75rem; font-weight:700; letter-spacing:-0.02em; color:var(--fail); font-feature-settings:'tnum' 1;">≥ ${{ "%.2f"|format(report.thesis.target_sell_price) }}</div>
         </div>
         {% endif %}
     </div>
     {% if report.thesis.invalidation_conditions %}
-    <div class="mt-4 pt-4 border-t border-ink-700">
-        <div class="text-sm text-gray-500 mb-2">⚠️ 失效条件</div>
-        <ul class="text-sm text-gray-300 space-y-1">
+    <div style="margin-top:var(--s-5); padding-top:var(--s-4); border-top:1px solid var(--line);">
+        <div style="font-size:var(--t-meta); color:var(--fail); font-family:var(--font-mono); text-transform:uppercase; letter-spacing:0.08em; margin-bottom:var(--s-3);">⚠️ 失效条件</div>
+        <ul style="list-style:none; color:var(--fg-2); font-size:0.96rem; line-height:1.7;">
         {% for c in report.thesis.invalidation_conditions %}
-            <li>— {{ c }}</li>
+            <li style="padding-left:var(--s-3); position:relative; margin-bottom:var(--s-2);">
+                <span style="position:absolute; left:0; color:var(--fail); font-weight:700;">·</span>
+                {{ c }}
+            </li>
         {% endfor %}
         </ul>
     </div>
     {% endif %}
-</div>
+</section>
 {% endif %}
 
-{# 8 Stages — collapsible cards #}
+{# ============================================================
+   8 STAGES — each in its own stage card with verdict bar
+   ============================================================ #}
 {% for stage in report.stages %}
-<details class="bg-ink-800 border border-ink-700 rounded-lg mb-3" {% if loop.index <= 3 %}open{% endif %}>
-    <summary class="cursor-pointer px-5 py-3 font-semibold flex justify-between items-center hover:bg-ink-700/50">
-        <span>
-            <span class="text-gray-500 text-sm">Stage {{ stage.stage_id }}</span>
-            <span class="ml-2">{{ stage.stage_name }}</span>
-        </span>
-        <span class="inline-block px-2 py-0.5 rounded text-xs font-medium
-            {% if stage.verdict.value == 'PASS' %}bg-green-900/50 text-green-300
-            {% elif stage.verdict.value == 'FAIL' %}bg-red-900/50 text-red-300
-            {% elif stage.verdict.value == 'BORDERLINE' %}bg-yellow-900/50 text-yellow-300
-            {% else %}bg-gray-700 text-gray-400{% endif %}">
-            {{ stage.verdict.value }}
-        </span>
+<details class="stage {{ stage.verdict.value | lower }} reveal reveal-4" {% if loop.index <= 3 %}open{% endif %}>
+    <summary style="cursor:pointer; list-style:none; outline:none;">
+        <div class="stage-head">
+            <div>
+                <span class="stage-num">Stage {{ stage.stage_id }}</span>
+                <h3 style="display:inline; margin-left:var(--s-2);">{{ stage.stage_name }}</h3>
+            </div>
+            <span class="verdict {{ stage.verdict.value | lower }}">{{ stage.verdict.value }}</span>
+        </div>
     </summary>
-    <div class="px-5 py-4 border-t border-ink-700">
+    <div style="margin-top:var(--s-4);">
         {% if stage.metrics %}
-        <table class="w-full text-sm mb-4">
-            <thead class="text-xs text-gray-500 uppercase">
-                <tr><th class="text-left py-1">指标</th><th class="text-right py-1">值</th><th class="text-right py-1">阈值</th><th class="text-center py-1">通过</th></tr>
+        <table class="tbl" style="margin-bottom:var(--s-4);">
+            <thead>
+                <tr><th>指标</th><th style="text-align:right;">值</th><th style="text-align:right;">阈值</th><th style="text-align:center; width:60px;">通过</th></tr>
             </thead>
             <tbody>
             {% for m in stage.metrics %}
-                <tr class="border-t border-ink-700">
-                    <td class="py-2">{{ m.name }}{% if m.note %}<div class="text-xs text-gray-500 mt-1">{{ m.note }}</div>{% endif %}</td>
-                    <td class="py-2 text-right font-mono">{{ m.value }}{{ m.unit }}</td>
-                    <td class="py-2 text-right text-xs text-gray-500">{{ m.threshold }}</td>
-                    <td class="py-2 text-center">{% if m['pass'] %}✅{% elif m['pass'] == False %}❌{% else %}—{% endif %}</td>
+                <tr>
+                    <td>
+                        {{ m.name }}
+                        {% if m.note %}<div style="font-size:var(--t-meta); color:var(--fg-3); margin-top:2px;">{{ m.note }}</div>{% endif %}
+                    </td>
+                    <td class="num" style="text-align:right;">{{ m.value }}{{ m.unit }}</td>
+                    <td style="text-align:right; font-family:var(--font-mono); font-size:var(--t-meta); color:var(--fg-3);">{{ m.threshold }}</td>
+                    <td style="text-align:center;">
+                        {% if m['pass'] %}<span class="dot pass"></span>
+                        {% elif m['pass'] == False %}<span class="dot fail"></span>
+                        {% else %}<span class="dot skip"></span>
+                        {% endif %}
+                    </td>
                 </tr>
             {% endfor %}
             </tbody>
         </table>
         {% endif %}
+
+        {% if stage.findings %}
+        <div class="findings">
         {% for f in stage.findings %}
-        <p class="text-sm text-gray-300 leading-relaxed mb-2">{{ f | safe }}</p>
+            <p>{{ f | safe }}</p>
         {% endfor %}
+        </div>
+        {% endif %}
     </div>
 </details>
 {% endfor %}
 
 {% if report.inversion_failure_modes %}
-<div class="bg-red-900/10 border border-red-800 rounded-lg p-5 mt-6">
-    <h3 class="text-lg font-semibold text-red-300 mb-3">🔄 可能如何失败（Munger Inversion）</h3>
-    <ul class="text-sm text-gray-300 space-y-2">
+<section class="reveal reveal-5" style="background:var(--bg-1); border:1px solid var(--line); border-left:3px solid var(--fail); border-radius:var(--radius); padding:var(--s-5) var(--s-6); margin-top:var(--s-6);">
+    <div style="font-size:var(--t-meta); color:var(--fail); font-family:var(--font-mono); text-transform:uppercase; letter-spacing:0.08em; margin-bottom:var(--s-3);">🔄 可能如何失败 · Munger Inversion</div>
+    <ul style="list-style:none; color:var(--fg-2); font-size:0.96rem; line-height:1.7;">
     {% for fm in report.inversion_failure_modes %}
-        <li>— {{ fm }}</li>
+        <li style="padding-left:var(--s-3); position:relative; margin-bottom:var(--s-3);">
+            <span style="position:absolute; left:0; color:var(--fail); font-weight:700;">·</span>
+            {{ fm }}
+        </li>
     {% endfor %}
     </ul>
-</div>
+</section>
 {% endif %}
 
-<div class="mt-8 pt-4 border-t border-ink-700 text-xs text-gray-600 text-center">
-    <em>教育性分析，不构成投资建议。自行决策。</em>
+<div style="margin-top:var(--s-8); padding-top:var(--s-4); border-top:1px solid var(--line); text-align:center; font-size:var(--t-meta); color:var(--fg-3); font-style:italic;">
+    教育性分析，不构成投资建议。自行决策。
 </div>
+
+<style>
+/* hide the disclosure triangle on stage <summary> — verdict pill is the affordance */
+details.stage > summary::-webkit-details-marker { display: none; }
+details.stage > summary { list-style: none; }
+</style>
 
 {% endblock %}
