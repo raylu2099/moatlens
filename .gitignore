@@ -1,6 +1,6 @@
 .env
 .ghtoken
-.venv/
+.venv
 venv/
 __pycache__/
 *.pyc
