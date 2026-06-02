@@ -218,22 +218,19 @@ curl -s http://127.0.0.1:48291/api/status
 /opt/bin/tmux capture-pane -t moatlens-web -p -S -20   # see latest log lines
 ```
 
-### Running on Mac (from Synology Drive-synced source)
+### Running on Mac (local clone + GitHub — NOT Synology Drive)
 
-Mac has a bidirectional sync of the entire repo under (typically) `~/SynologyDrive/moatlens/`.
-To run locally without polluting NAS state, **always set these two env vars**:
+**As of 2026-06: the Mac no longer keeps this repo on Synology Drive.** File-syncing
+`.git` caused stale-NFS corruption. The Mac works in a LOCAL clone at
+`~/Claude Code/moatlens`; Mac<->NAS sync is **only via GitHub** (`git push/pull`,
+origin = raylu2099/moatlens). The NAS keeps its own copy and runs the app.
 
-```bash
-export PYTHONDONTWRITEBYTECODE=1    # prevents __pycache__ from syncing back
-export MOATLENS_DATA_DIR="$HOME/.moatlens/data"   # isolate Mac audits from NAS
-```
+- Enter: `moatlens-env` — activates `~/.venvs/moatlens` (py3.13), cds in, auto `git pull --ff-only`.
+- Finish edits: `mlpush "msg"` — stage-all + commit + push; NAS auto-pulls (cron).
+- Run locally (rare): set `PYTHONDONTWRITEBYTECODE=1` and `MOATLENS_DATA_DIR="$HOME/.moatlens/data"`; the clone needs its own `.env` (gitignored — copy from NAS).
+- `_WORK*.md` is now git-tracked (handoff travels via GitHub).
 
-Then either `./setup.sh` (first time) + `source .venv/bin/activate` + `uvicorn ...`,
-or use the one-shot script at `~/bin/moatlens.sh` if created.
-
-See `docs/adr/` for why specific architectural choices were made. See
-`project_moatlens.md` in the user's auto-memory for current operational state
-(Anthropic key status, latest commit, etc.).
+See `docs/adr/` for architectural choices, and `project_moatlens.md` in auto-memory for operational state.
 
 ### Git tags (as of 2026-04)
 
