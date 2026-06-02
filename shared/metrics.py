@@ -10,7 +10,7 @@ Schema per line:
 {
   "ts": "2026-04-18T18:00:00+00:00",
   "provider": "claude" | "perplexity" | "financial_datasets",
-  "model": "claude-sonnet-4-5" | null,
+  "model": "claude-sonnet-4-6" | null,
   "input_tok": 2300, "output_tok": 800,
   "cost_usd": 0.0189,
   "stage": 3 | null,

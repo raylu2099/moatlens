@@ -34,7 +34,7 @@ Worst case observed: ~$0.80 for a tech stock with heavy inversion iteration.
 
 Every Claude/Perplexity call writes a line to `data/metrics/cost.jsonl`:
 ```jsonl
-{"ts":"2026-04-18T18:00:00Z","provider":"claude","model":"claude-sonnet-4-5","input_tok":2300,"output_tok":800,"cost_usd":0.0189,"stage":3,"session_id":"..."}
+{"ts":"2026-04-18T18:00:00Z","provider":"claude","model":"claude-sonnet-4-6","input_tok":2300,"output_tok":800,"cost_usd":0.0189,"stage":3,"session_id":"..."}
 ```
 
 Weekly review: `cat data/metrics/cost.jsonl | jq -r 'select(.ts | startswith("2026-04"))|.cost_usd' | awk '{s+=$1}END{print s}'`

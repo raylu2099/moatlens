@@ -39,7 +39,7 @@ def tmp_cfg(tmp_path) -> Config:
         cache_dir=cache,
         prompts_dir=tmp_path / "prompts",
         docs_dir=tmp_path / "docs",
-        claude_model="claude-sonnet-4-5",
+        claude_model="claude-sonnet-4-6",
         pplx_model_search="sonar",
         pplx_model_analysis="sonar-pro",
         cache_fundamentals_ttl=60,

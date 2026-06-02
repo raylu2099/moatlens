@@ -21,7 +21,7 @@ def cfg_with_wisdom(tmp_path) -> Config:
     cfg = Config(
         data_dir=data, cache_dir=data / "cache",
         prompts_dir=prompts, docs_dir=tmp_path / "docs",
-        claude_model="claude-sonnet-4-5",
+        claude_model="claude-sonnet-4-6",
         pplx_model_search="sonar", pplx_model_analysis="sonar-pro",
         cache_fundamentals_ttl=60, cache_perplexity_ttl=60, cache_macro_ttl=60,
         project_root=tmp_path,

@@ -21,7 +21,7 @@ def cfg(tmp_path) -> Config:
 
 
 def test_log_cost_appends_jsonl(cfg):
-    log_cost(cfg, provider="claude", cost_usd=0.05, model="claude-sonnet-4-5",
+    log_cost(cfg, provider="claude", cost_usd=0.05, model="claude-sonnet-4-6",
              input_tok=1000, output_tok=500, stage=3, tag="audit")
     log_cost(cfg, provider="perplexity", cost_usd=0.01, tag="s3_research")
 
