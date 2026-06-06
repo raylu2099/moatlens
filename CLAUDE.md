@@ -86,20 +86,23 @@ Overrides the NAS-level `/volume1/homes/hellolufeng/CLAUDE.md` where they confli
    the other-machine Claude learned across prior sessions — Ray's collaboration
    style, already-rejected ideas, common pitfalls. Pairs with this CLAUDE.md
    (this one is rules; that one is history/heuristics).
-2. **Check `_WORK.md` at project root** — if it exists and status is "进行中" / "in progress",
-   read it first. It's a multi-session, multi-machine task handoff file written by a
-   previous Claude (possibly on another machine via Synology Drive sync). Continue from
-   the first unchecked subtask.
+2. **Check the handoff files at project root** — read your machine-local `_WORK.md`
+   (if present, status "进行中"/"in progress") plus the tracked `_HANDOFF_mac.md` +
+   `_HANDOFF_nas.md` (the other machine's state, synced via GitHub). The SessionStart
+   hook auto-injects all three. Continue from the first unchecked subtask.
 2. Read the relevant ADR(s) in `docs/adr/` — don't undo a documented decision
 3. Check `BUDGET.md` if the change adds API calls
 4. Check `git log --oneline -10` for recent context
 5. If the task is non-trivial (>1 file or >100 lines), use Plan mode
 
-### Multi-task handoff convention (`_WORK.md`)
+### Multi-task handoff convention (split per-machine handoff)
 
-When the user asks for a multi-step task (≥3 subtasks), **always write/update
-`_WORK.md` at project root** as you work. Synology Drive syncs it to the other
-machine, so the next Claude session on NAS **or** Mac picks up seamlessly.
+When the user asks for a multi-step task (≥3 subtasks), keep detailed working
+state in your machine-local `_WORK.md`, and write **cross-machine** status into
+**your own** handoff file — Mac writes `_HANDOFF_mac.md`, NAS writes
+`_HANDOFF_nas.md`. Each machine writes ONLY its own file and reads the other's,
+so GitHub sync never produces a merge conflict (single-writer ownership). Both
+`_HANDOFF_*.md` are git-tracked; `_WORK.md` stays local (gitignored).
 
 Schema:
 ```markdown
@@ -130,7 +133,8 @@ Rules:
 - When stopping (session ending or handing off), append to "下一步上下文"
   exactly what you were about to do and any gotchas
 - When fully done, set `状态: 完成`, add a closing line to 历史
-- `_WORK*.md` is gitignored (sensitive notes stay out of git)
+- `_WORK*.md` is gitignored (machine-local scratch); the tracked `_HANDOFF_mac.md`
+  / `_HANDOFF_nas.md` carry cross-machine state via GitHub
 - One active `_WORK.md` per project. If starting new work while old is still
   "进行中", either finish old or rename to `_WORK-archive-<date>.md`
 
@@ -228,7 +232,9 @@ origin = raylu2099/moatlens). The NAS keeps its own copy and runs the app.
 - Enter: `moatlens-env` — activates `~/.venvs/moatlens` (py3.13), cds in, auto `git pull --ff-only`.
 - Finish edits: `mlpush "msg"` — stage-all + commit + push; NAS auto-pulls (cron).
 - Run locally (rare): set `PYTHONDONTWRITEBYTECODE=1` and `MOATLENS_DATA_DIR="$HOME/.moatlens/data"`; the clone needs its own `.env` (gitignored — copy from NAS).
-- `_WORK*.md` is now git-tracked (handoff travels via GitHub).
+- `_WORK.md` is machine-local (gitignored); cross-machine handoff travels via the
+  tracked `_HANDOFF_mac.md` / `_HANDOFF_nas.md` on GitHub. Remote is SSH
+  (`git@github.com:raylu2099/moatlens.git`).
 
 See `docs/adr/` for architectural choices, and `project_moatlens.md` in auto-memory for operational state.
 

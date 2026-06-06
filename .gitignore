@@ -21,3 +21,12 @@ demo/*.cache
 
 # OS
 Thumbs.db
+
+# Multi-session handoff scratch (machine-local, per CLAUDE.md convention)
+_WORK*.md
+_PLAN*.md
+_HANDOFF*.md
+# EXCEPTION (2026-06-06): per-machine handoff files ARE tracked — each machine
+# writes ONLY its own + reads the other's = cross-machine 接力, zero merge conflict.
+!_HANDOFF_mac.md
+!_HANDOFF_nas.md
