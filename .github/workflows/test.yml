@@ -16,7 +16,7 @@ jobs:
           python-version: "3.12"
           cache: pip
       - name: Install ruff
-        run: pip install ruff
+        run: pip install ruff==0.15.15  # pinned: unpinned latest can spontaneously red CI on a ruff release
       - name: Lint
         run: ruff check .
       - name: Format check
