@@ -2,7 +2,7 @@ name: tests
 
 on:
   push:
-    branches: [main]
+    branches: ['**']   # all branches — so no long-lived branch hides un-CI'd debt (lesson: round-3-audit-fixes)
   pull_request:
     branches: [main]
 
