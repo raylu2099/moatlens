@@ -1,0 +1,6 @@
+# Revisions to skip in `git blame` — bulk/mechanical changes, no semantic edits.
+# GitHub honors this file automatically. Locally, enable once with:
+#   git config blame.ignoreRevsFile .git-blame-ignore-revs
+#
+# de9b4c3 — bulk ruff reformat (32 files) + autofixes; cleared pre-existing lint debt.
+de9b4c3ff398b35cbf2aedf632711aa03adc697e
