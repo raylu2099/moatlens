@@ -5,17 +5,17 @@ Minimal structure: one query → one stream → done. Unlike ChatSession which
 holds a conversation, AskSession stores: query, ticker, selected stages,
 final answer blocks. No multi-turn state.
 """
+
 from __future__ import annotations
 
 import json
 import os
 import uuid
 from dataclasses import asdict, dataclass, field
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 from shared.config import Config
-
 
 ASK_TTL_DAYS = 7
 
@@ -25,19 +25,21 @@ class AskSession:
     session_id: str
     query: str = ""
     ticker: str = ""
-    status: str = "pending"            # pending | routing | running | complete | error
+    status: str = "pending"  # pending | routing | running | complete | error
     selected_stages: list[int] = field(default_factory=list)
     intent_rationale: str = ""
     created_at: str = ""
     updated_at: str = ""
 
     @classmethod
-    def new(cls, query: str, ticker: str) -> "AskSession":
-        now = datetime.now(timezone.utc).isoformat()
+    def new(cls, query: str, ticker: str) -> AskSession:
+        now = datetime.now(UTC).isoformat()
         return cls(
             session_id=uuid.uuid4().hex,
-            query=query, ticker=ticker.upper(),
-            created_at=now, updated_at=now,
+            query=query,
+            ticker=ticker.upper(),
+            created_at=now,
+            updated_at=now,
         )
 
     def to_dict(self) -> dict:
@@ -63,7 +65,7 @@ def _atomic_write(path: Path, content: str) -> None:
 
 
 def save_ask_session(cfg: Config, session: AskSession) -> Path:
-    session.updated_at = datetime.now(timezone.utc).isoformat()
+    session.updated_at = datetime.now(UTC).isoformat()
     path = _session_path(cfg, session.session_id)
     _atomic_write(path, json.dumps(session.to_dict(), indent=2, ensure_ascii=False))
     return path
@@ -93,7 +95,7 @@ def cleanup_expired(cfg: Config, ttl_days: int = ASK_TTL_DAYS) -> int:
     d = asks_dir(cfg)
     if not d.exists():
         return 0
-    cutoff = datetime.now(timezone.utc) - timedelta(days=ttl_days)
+    cutoff = datetime.now(UTC) - timedelta(days=ttl_days)
     removed = 0
     for p in d.glob("*.json"):
         try:
@@ -101,7 +103,7 @@ def cleanup_expired(cfg: Config, ttl_days: int = ASK_TTL_DAYS) -> int:
             ts = data.get("updated_at") or data.get("created_at") or ""
             dt = datetime.fromisoformat(ts)
             if dt.tzinfo is None:
-                dt = dt.replace(tzinfo=timezone.utc)
+                dt = dt.replace(tzinfo=UTC)
             if dt < cutoff:
                 p.unlink()
                 removed += 1

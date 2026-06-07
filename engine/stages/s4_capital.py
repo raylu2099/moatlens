@@ -61,7 +61,7 @@ def _buffett_dollar_test(income_periods: list[dict], current_market_cap: float) 
             "current_market_cap": current_market_cap,
             "ratio_proxy": ratio,
             "interpretation": (
-                f"累计留存 ${retained/1e9:.1f}B 对应当前市值 ${current_market_cap/1e9:.1f}B。"
+                f"累计留存 ${retained / 1e9:.1f}B 对应当前市值 ${current_market_cap / 1e9:.1f}B。"
                 f"这是粗略代理（无历史市值），完整 $1 test 应对比 N 年前市值。"
             ),
         }
@@ -203,8 +203,8 @@ def run(
 {company_name} ({ticker})
 
 # 定量信号
-- 股份变化 5Y: {[m for m in metrics if '股份变化' in m.name][0].value if any('股份变化' in m.name for m in metrics) else 'n/a'}%
-- Buffett $1 test proxy: {[m for m in metrics if '$1 Test' in m.name][0].value if any('$1 Test' in m.name for m in metrics) else 'n/a'}x
+- 股份变化 5Y: {[m for m in metrics if "股份变化" in m.name][0].value if any("股份变化" in m.name for m in metrics) else "n/a"}%
+- Buffett $1 test proxy: {[m for m in metrics if "$1 Test" in m.name][0].value if any("$1 Test" in m.name for m in metrics) else "n/a"}x
 - 近期内部人: 买{buy_count} 卖{sell_count}, 净 {net_shares:+,.0f} 股
 
 # Perplexity 研究：股东信与管理层记录

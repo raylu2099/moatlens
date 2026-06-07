@@ -1,6 +1,7 @@
 """
 Prompt loader tests — verify version extraction and mtime-aware caching.
 """
+
 from __future__ import annotations
 
 import time
@@ -18,11 +19,16 @@ def cfg_with_prompts(tmp_path) -> Config:
     data = tmp_path / "data"
     data.mkdir()
     return Config(
-        data_dir=data, cache_dir=data / "cache",
-        prompts_dir=prompts, docs_dir=tmp_path / "docs",
+        data_dir=data,
+        cache_dir=data / "cache",
+        prompts_dir=prompts,
+        docs_dir=tmp_path / "docs",
         claude_model="claude-sonnet-4-6",
-        pplx_model_search="sonar", pplx_model_analysis="sonar-pro",
-        cache_fundamentals_ttl=60, cache_perplexity_ttl=60, cache_macro_ttl=60,
+        pplx_model_search="sonar",
+        pplx_model_analysis="sonar-pro",
+        cache_fundamentals_ttl=60,
+        cache_perplexity_ttl=60,
+        cache_macro_ttl=60,
         project_root=tmp_path,
     )
 
@@ -58,6 +64,7 @@ def test_load_prompt_picks_up_edits_via_mtime(cfg_with_prompts):
     p.write_text("<!-- version: 2 -->\nv2 body", encoding="utf-8")
     # Bump mtime explicitly in case the sleep wasn't enough on slow FS.
     import os
+
     stat = p.stat()
     os.utime(p, (stat.st_atime, stat.st_mtime + 1))
 
@@ -69,6 +76,7 @@ def test_load_prompt_picks_up_edits_via_mtime(cfg_with_prompts):
 def test_project_prompts_are_loadable():
     """Real prompts shipped with the repo must parse."""
     from shared.config import load_config
+
     cfg = load_config()
     for slug in ("s3_moat", "s4_capital", "s8_inversion"):
         body, ver = load_prompt(cfg, slug)

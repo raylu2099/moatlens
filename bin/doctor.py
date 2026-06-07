@@ -60,21 +60,27 @@ def main() -> int:
         # v0.6 optional enrichment providers — skipped with ⚪ if key missing
         (
             "sec-api.io (optional)",
-            lambda: p_sec.test_connection(keys)
-            if keys.sec_api_io
-            else (None, "key not set (SEC_API_IO_KEY)"),
+            lambda: (
+                p_sec.test_connection(keys)
+                if keys.sec_api_io
+                else (None, "key not set (SEC_API_IO_KEY)")
+            ),
         ),
         (
             "Finnhub (optional)",
-            lambda: p_finnhub.test_connection(keys)
-            if keys.finnhub
-            else (None, "key not set (FINNHUB_API_KEY)"),
+            lambda: (
+                p_finnhub.test_connection(keys)
+                if keys.finnhub
+                else (None, "key not set (FINNHUB_API_KEY)")
+            ),
         ),
         (
             "MarketAux (optional)",
-            lambda: p_marketaux.test_connection(keys)
-            if keys.marketaux
-            else (None, "key not set (MARKETAUX_API_KEY)"),
+            lambda: (
+                p_marketaux.test_connection(keys)
+                if keys.marketaux
+                else (None, "key not set (MARKETAUX_API_KEY)")
+            ),
         ),
         ("FDA / ClinicalTrials (free)", lambda: p_fda.test_connection(keys)),
     ]

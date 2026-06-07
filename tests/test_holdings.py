@@ -1,11 +1,16 @@
 """Holdings persistence + CRUD tests."""
+
 from __future__ import annotations
 
 import pytest
 
 from shared.config import Config
 from shared.holdings import (
-    add_holding, holdings_path, is_holding, load_holdings, remove_holding,
+    add_holding,
+    holdings_path,
+    is_holding,
+    load_holdings,
+    remove_holding,
 )
 
 
@@ -14,11 +19,16 @@ def cfg(tmp_path) -> Config:
     data = tmp_path / "data"
     data.mkdir()
     return Config(
-        data_dir=data, cache_dir=data / "cache",
-        prompts_dir=tmp_path / "prompts", docs_dir=tmp_path / "docs",
+        data_dir=data,
+        cache_dir=data / "cache",
+        prompts_dir=tmp_path / "prompts",
+        docs_dir=tmp_path / "docs",
         claude_model="claude-sonnet-4-6",
-        pplx_model_search="sonar", pplx_model_analysis="sonar-pro",
-        cache_fundamentals_ttl=60, cache_perplexity_ttl=60, cache_macro_ttl=60,
+        pplx_model_search="sonar",
+        pplx_model_analysis="sonar-pro",
+        cache_fundamentals_ttl=60,
+        cache_perplexity_ttl=60,
+        cache_macro_ttl=60,
         project_root=tmp_path,
     )
 

@@ -1,4 +1,5 @@
 """Stream adapter tests — monkeypatch every stage so no network or Claude calls."""
+
 from __future__ import annotations
 
 import pytest
@@ -8,7 +9,6 @@ from engine.models import Metric, StageResult, Verdict
 from shared.chat import ChatSession, save_session
 from shared.config import ApiKeys, Config
 from shared.storage import audits_root
-from engine.wisdom import wisdom_path
 
 
 @pytest.fixture
@@ -18,7 +18,8 @@ def cfg(tmp_path) -> Config:
     prompts = tmp_path / "prompts"
     prompts.mkdir()
     # Minimal wisdom.yaml so we can get quotes
-    (prompts / "wisdom.yaml").write_text("""
+    (prompts / "wisdom.yaml").write_text(
+        """
 - id: q1
   author: Warren Buffett
   text_en: "en 1"
@@ -35,21 +36,29 @@ def cfg(tmp_path) -> Config:
   themes: [inversion]
   stages: [3, 4, 5, 6, 7, 8]
   triggers: [action_buy]
-""", encoding="utf-8")
+""",
+        encoding="utf-8",
+    )
     return Config(
-        data_dir=data, cache_dir=data / "cache",
-        prompts_dir=prompts, docs_dir=tmp_path / "docs",
+        data_dir=data,
+        cache_dir=data / "cache",
+        prompts_dir=prompts,
+        docs_dir=tmp_path / "docs",
         claude_model="claude-sonnet-4-6",
-        pplx_model_search="sonar", pplx_model_analysis="sonar-pro",
-        cache_fundamentals_ttl=60, cache_perplexity_ttl=60, cache_macro_ttl=60,
+        pplx_model_search="sonar",
+        pplx_model_analysis="sonar-pro",
+        cache_fundamentals_ttl=60,
+        cache_perplexity_ttl=60,
+        cache_macro_ttl=60,
         project_root=tmp_path,
     )
 
 
 @pytest.fixture
 def keys() -> ApiKeys:
-    return ApiKeys(anthropic="sk-ant-test", perplexity="pplx-test",
-                   financial_datasets="fd-test", fred="")
+    return ApiKeys(
+        anthropic="sk-ant-test", perplexity="pplx-test", financial_datasets="fd-test", fred=""
+    )
 
 
 @pytest.fixture(autouse=True)
@@ -58,8 +67,10 @@ def stub_all_stages_and_company(monkeypatch):
 
     def fake_company_info(ticker):
         return {"long_name": f"{ticker} Corp"}
+
     monkeypatch.setattr(
-        "engine.providers.yfinance_provider.fetch_company_info", fake_company_info,
+        "engine.providers.yfinance_provider.fetch_company_info",
+        fake_company_info,
     )
 
     def make_stub(sid, name):
@@ -76,21 +87,27 @@ def stub_all_stages_and_company(monkeypatch):
                 raw["target_buy"] = 70
                 raw["target_sell"] = 110
             return StageResult(
-                stage_id=sid, stage_name=name,
+                stage_id=sid,
+                stage_name=name,
                 verdict=Verdict.PASS,
-                metrics=[Metric(name=f"m{sid}", value=1.0, threshold=">=1",
-                                **{"pass": True})],
+                metrics=[Metric(name=f"m{sid}", value=1.0, threshold=">=1", **{"pass": True})],
                 findings=[f"stub finding for {sid}"],
                 raw_data=raw,
             )
+
         return _run
 
     import engine.stages as pkg
+
     for sid, mod_name in [
-        (1, "s1_competence"), (2, "s2_integrity"),
-        (3, "s3_moat"), (4, "s4_capital"),
-        (5, "s5_owner_earnings"), (6, "s6_valuation"),
-        (7, "s7_safety"), (8, "s8_inversion"),
+        (1, "s1_competence"),
+        (2, "s2_integrity"),
+        (3, "s3_moat"),
+        (4, "s4_capital"),
+        (5, "s5_owner_earnings"),
+        (6, "s6_valuation"),
+        (7, "s7_safety"),
+        (8, "s8_inversion"),
     ]:
         mod = getattr(pkg, mod_name)
         monkeypatch.setattr(mod, "run", make_stub(sid, mod.STAGE_NAME))
@@ -174,6 +191,7 @@ def test_stream_saves_session_state(cfg, keys):
     _collect(stream_adapter.stream_audit(cfg, keys, session))
 
     from shared.chat import load_session
+
     reloaded = load_session(cfg, session.session_id)
     assert reloaded is not None
     assert reloaded.audit_status == "complete"

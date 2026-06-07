@@ -157,7 +157,7 @@ def run(
         findings.append("")
         findings.append("**Kelly 仓位 heuristic** (half-Kelly; 不是教科书 Kelly):")
         findings.append(
-            f"  胜率假设 {win_prob*100:.0f}% + 赔率 = upside%/downside% = {win_loss:.1f}"
+            f"  胜率假设 {win_prob * 100:.0f}% + 赔率 = upside%/downside% = {win_loss:.1f}"
         )
         findings.append(
             "  注：教科书 Kelly 要二元输赢+独立重复+已知频率概率，本工具把它当**仓位 prior** 用，不是 EV 保证"
@@ -171,7 +171,7 @@ def run(
     # --- Howard Marks lens ---
     findings.append("")
     findings.append("**Howard Marks 检查**: ")
-    findings.append("  超额收益 = **正确** × **非共识**。" f"基准 IV ${base_iv:.2f} 是你的判断。")
+    findings.append(f"  超额收益 = **正确** × **非共识**。基准 IV ${base_iv:.2f} 是你的判断。")
     if mos_pct >= 30:
         findings.append(
             f"  当前价 ${current_price:.2f} (折让 {mos_pct:.0f}%) 暗示市场更悲观。"
@@ -184,7 +184,7 @@ def run(
         )
     else:
         findings.append(
-            "  市场与你判断基本一致。没有 alpha 可言 — " "要么等更好价格，要么找真正非共识的机会。"
+            "  市场与你判断基本一致。没有 alpha 可言 — 要么等更好价格，要么找真正非共识的机会。"
         )
 
     # --- v0.6 enrichment: consensus vs your IV (Howard Marks framing) ---

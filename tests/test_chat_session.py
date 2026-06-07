@@ -1,16 +1,22 @@
 """Chat session persistence + TTL cleanup tests."""
+
 from __future__ import annotations
 
 import json
-from datetime import datetime, timedelta, timezone
-from pathlib import Path
+from datetime import UTC, datetime, timedelta
 
 import pytest
 
 from shared.chat import (
-    CHAT_TTL_DAYS, ChatMessage, ChatSession,
-    chats_dir, cleanup_expired, delete_session,
-    list_sessions, load_session, save_session,
+    CHAT_TTL_DAYS,
+    ChatMessage,
+    ChatSession,
+    chats_dir,
+    cleanup_expired,
+    delete_session,
+    list_sessions,
+    load_session,
+    save_session,
 )
 from shared.config import Config
 
@@ -20,10 +26,16 @@ def cfg(tmp_path) -> Config:
     data = tmp_path / "data"
     data.mkdir()
     return Config(
-        data_dir=data, cache_dir=data / "cache",
-        prompts_dir=tmp_path / "prompts", docs_dir=tmp_path / "docs",
-        claude_model="", pplx_model_search="sonar", pplx_model_analysis="sonar-pro",
-        cache_fundamentals_ttl=60, cache_perplexity_ttl=60, cache_macro_ttl=60,
+        data_dir=data,
+        cache_dir=data / "cache",
+        prompts_dir=tmp_path / "prompts",
+        docs_dir=tmp_path / "docs",
+        claude_model="",
+        pplx_model_search="sonar",
+        pplx_model_analysis="sonar-pro",
+        cache_fundamentals_ttl=60,
+        cache_perplexity_ttl=60,
+        cache_macro_ttl=60,
         project_root=tmp_path,
     )
 
@@ -32,7 +44,7 @@ def test_new_session_has_hex_id():
     s = ChatSession.new("aapl")
     assert s.session_id.isalnum()
     assert len(s.session_id) == 32
-    assert s.ticker == "AAPL"          # uppercased
+    assert s.ticker == "AAPL"  # uppercased
     assert s.audit_status == "pending"
 
 
@@ -87,7 +99,7 @@ def test_cleanup_expired(cfg):
 
     # Write an expired one directly
     old = ChatSession.new("NVDA")
-    old_ts = (datetime.now(timezone.utc) - timedelta(days=CHAT_TTL_DAYS + 1)).isoformat()
+    old_ts = (datetime.now(UTC) - timedelta(days=CHAT_TTL_DAYS + 1)).isoformat()
     old.created_at = old_ts
     old.updated_at = old_ts
     path = chats_dir(cfg) / f"{old.session_id}.json"
@@ -114,4 +126,4 @@ def test_chat_message_timestamp_iso_utc():
     m = ChatMessage.new("user", "hi")
     # Roundtrips as ISO
     datetime.fromisoformat(m.ts)
-    assert m.ts.endswith("+00:00")     # timezone.utc suffix
+    assert m.ts.endswith("+00:00")  # timezone.utc suffix

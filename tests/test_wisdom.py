@@ -1,13 +1,18 @@
 """Wisdom loader + selection tests."""
-from __future__ import annotations
 
-from pathlib import Path
+from __future__ import annotations
 
 import pytest
 
 from engine.wisdom import (
-    Quote, filter_by_theme, get_quote_by_id, group_by_theme,
-    load_wisdom, pick_for_stage, pick_for_trigger, wisdom_path,
+    Quote,
+    filter_by_theme,
+    get_quote_by_id,
+    group_by_theme,
+    load_wisdom,
+    pick_for_stage,
+    pick_for_trigger,
+    wisdom_path,
 )
 from shared.config import Config
 
@@ -19,14 +24,20 @@ def cfg_with_wisdom(tmp_path) -> Config:
     data = tmp_path / "data"
     data.mkdir()
     cfg = Config(
-        data_dir=data, cache_dir=data / "cache",
-        prompts_dir=prompts, docs_dir=tmp_path / "docs",
+        data_dir=data,
+        cache_dir=data / "cache",
+        prompts_dir=prompts,
+        docs_dir=tmp_path / "docs",
         claude_model="claude-sonnet-4-6",
-        pplx_model_search="sonar", pplx_model_analysis="sonar-pro",
-        cache_fundamentals_ttl=60, cache_perplexity_ttl=60, cache_macro_ttl=60,
+        pplx_model_search="sonar",
+        pplx_model_analysis="sonar-pro",
+        cache_fundamentals_ttl=60,
+        cache_perplexity_ttl=60,
+        cache_macro_ttl=60,
         project_root=tmp_path,
     )
-    wisdom_path(cfg).write_text("""
+    wisdom_path(cfg).write_text(
+        """
 - id: q1
   author: Warren Buffett
   text_en: "quote 1 en"
@@ -59,7 +70,9 @@ def cfg_with_wisdom(tmp_path) -> Config:
   themes: [competence]
   stages: [1]
   triggers: []
-""", encoding="utf-8")
+""",
+        encoding="utf-8",
+    )
     return cfg
 
 
@@ -73,10 +86,16 @@ def test_load_parses_all_valid_entries(cfg_with_wisdom):
 def test_load_returns_empty_when_file_missing(tmp_path):
     # Config with no wisdom.yaml
     cfg = Config(
-        data_dir=tmp_path, cache_dir=tmp_path / "cache",
-        prompts_dir=tmp_path / "prompts", docs_dir=tmp_path / "docs",
-        claude_model="", pplx_model_search="sonar", pplx_model_analysis="sonar-pro",
-        cache_fundamentals_ttl=60, cache_perplexity_ttl=60, cache_macro_ttl=60,
+        data_dir=tmp_path,
+        cache_dir=tmp_path / "cache",
+        prompts_dir=tmp_path / "prompts",
+        docs_dir=tmp_path / "docs",
+        claude_model="",
+        pplx_model_search="sonar",
+        pplx_model_analysis="sonar-pro",
+        cache_fundamentals_ttl=60,
+        cache_perplexity_ttl=60,
+        cache_macro_ttl=60,
         project_root=tmp_path,
     )
     assert load_wisdom(cfg) == []
@@ -158,19 +177,28 @@ def test_duplicate_ids_deduped(tmp_path):
     """If a user edits wisdom.yaml and accidentally duplicates an id, only first wins."""
     prompts = tmp_path / "prompts"
     prompts.mkdir()
-    (prompts / "wisdom.yaml").write_text("""
+    (prompts / "wisdom.yaml").write_text(
+        """
 - id: dup
   text_en: "first"
   themes: [x]
 - id: dup
   text_en: "second"
   themes: [y]
-""", encoding="utf-8")
+""",
+        encoding="utf-8",
+    )
     cfg = Config(
-        data_dir=tmp_path, cache_dir=tmp_path / "cache",
-        prompts_dir=prompts, docs_dir=tmp_path / "docs",
-        claude_model="", pplx_model_search="sonar", pplx_model_analysis="sonar-pro",
-        cache_fundamentals_ttl=60, cache_perplexity_ttl=60, cache_macro_ttl=60,
+        data_dir=tmp_path,
+        cache_dir=tmp_path / "cache",
+        prompts_dir=prompts,
+        docs_dir=tmp_path / "docs",
+        claude_model="",
+        pplx_model_search="sonar",
+        pplx_model_analysis="sonar-pro",
+        cache_fundamentals_ttl=60,
+        cache_perplexity_ttl=60,
+        cache_macro_ttl=60,
         project_root=tmp_path,
     )
     quotes = load_wisdom(cfg)
@@ -181,6 +209,7 @@ def test_duplicate_ids_deduped(tmp_path):
 def test_project_wisdom_yaml_loads():
     """The real shipped wisdom.yaml must parse and have ≥ 20 quotes."""
     from shared.config import load_config
+
     cfg = load_config()
     quotes = load_wisdom(cfg)
     assert len(quotes) >= 20

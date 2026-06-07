@@ -85,7 +85,7 @@ def finnhub_insider_summary(
     line = (
         f"**📊 Finnhub 内部人交易（180 天）**: {data['tx_count']} 笔, "
         f"{direction} {abs(data['net_shares']):,} 股 "
-        f"(${abs(data['net_dollars'])/1e6:.1f}M)"
+        f"(${abs(data['net_dollars']) / 1e6:.1f}M)"
     )
     return line, data
 

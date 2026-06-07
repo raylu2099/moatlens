@@ -12,9 +12,10 @@ Events emitted (tuples of (kind, payload)):
                        "total_cost_usd", "inversion_failure_modes", ...})
 - ("error",           {"message"})
 """
+
 from __future__ import annotations
 
-from typing import Iterator
+from collections.abc import Iterator
 
 from engine import wisdom
 from engine.coach import commentary
@@ -25,12 +26,13 @@ from shared.chat import ChatMessage, ChatSession, save_session
 from shared.config import ApiKeys, Config
 from shared.storage import save_audit
 
-
 Event = tuple[str, dict]
 
 
 def stream_audit(
-    cfg: Config, keys: ApiKeys, session: ChatSession,
+    cfg: Config,
+    keys: ApiKeys,
+    session: ChatSession,
     skip_claude: bool = False,
 ) -> Iterator[Event]:
     """
@@ -41,14 +43,19 @@ def stream_audit(
     session.audit_status = "running"
     save_session(cfg, session)
 
-    yield "session_started", {
-        "ticker": session.ticker,
-        "session_id": session.session_id,
-    }
+    yield (
+        "session_started",
+        {
+            "ticker": session.ticker,
+            "session_id": session.session_id,
+        },
+    )
 
     try:
         gen = run_audit_wizard(
-            cfg, keys, session.ticker,
+            cfg,
+            keys,
+            session.ticker,
             anchor_thesis=session.anchor_thesis,
             tech_mode=session.tech_mode,
             skip_claude=skip_claude,
@@ -69,58 +76,82 @@ def stream_audit(
                 break
 
             session.current_stage = stage_id
-            session.add(ChatMessage.new(
-                "coach",
-                _stage_summary_line(result),
-                stage_id=stage_id,
-            ))
+            session.add(
+                ChatMessage.new(
+                    "coach",
+                    _stage_summary_line(result),
+                    stage_id=stage_id,
+                )
+            )
 
-            yield "stage_complete", {
-                "stage_id": stage_id,
-                "stage_name": result.stage_name,
-                "verdict": result.verdict.value,
-                "metrics": [
-                    {
-                        "name": m.name, "value": m.value, "unit": m.unit,
-                        "threshold": m.threshold, "pass": m.pass_, "note": m.note,
-                    }
-                    for m in result.metrics
-                ],
-                "findings": list(result.findings),
-            }
+            yield (
+                "stage_complete",
+                {
+                    "stage_id": stage_id,
+                    "stage_name": result.stage_name,
+                    "verdict": result.verdict.value,
+                    "metrics": [
+                        {
+                            "name": m.name,
+                            "value": m.value,
+                            "unit": m.unit,
+                            "threshold": m.threshold,
+                            "pass": m.pass_,
+                            "note": m.note,
+                        }
+                        for m in result.metrics
+                    ],
+                    "findings": list(result.findings),
+                },
+            )
 
             # Pick a quote for this stage, exclude already-used
             q = wisdom.pick_for_stage(cfg, stage_id, session.session_id, exclude_ids=used_quote_ids)
             if q:
                 used_quote_ids.add(q.id)
-                yield "quote", {
-                    "stage_id": stage_id,
-                    "quote": {
-                        "id": q.id, "author": q.author,
-                        "text_en": q.text_en, "text_cn": q.text_cn,
-                        "source": q.source, "themes": q.themes,
+                yield (
+                    "quote",
+                    {
+                        "stage_id": stage_id,
+                        "quote": {
+                            "id": q.id,
+                            "author": q.author,
+                            "text_en": q.text_en,
+                            "text_cn": q.text_cn,
+                            "source": q.source,
+                            "themes": q.themes,
+                        },
                     },
-                }
+                )
 
             # Generate commentary (Haiku or rule)
             commentary_text = commentary(
-                cfg, keys, result, q,
+                cfg,
+                keys,
+                result,
+                q,
                 user_context=session.anchor_thesis,
             )
-            session.add(ChatMessage.new(
-                "coach", commentary_text,
-                stage_id=stage_id,
-                quote_id=q.id if q else "",
-            ))
+            session.add(
+                ChatMessage.new(
+                    "coach",
+                    commentary_text,
+                    stage_id=stage_id,
+                    quote_id=q.id if q else "",
+                )
+            )
             save_session(cfg, session)
             yield "commentary", {"stage_id": stage_id, "text": commentary_text}
 
             # Emit next stage_start unless this was stage 8
             if stage_id < 8:
-                yield "stage_start", {
-                    "stage_id": stage_id + 1,
-                    "stage_name": _stage_name(stage_id + 1),
-                }
+                yield (
+                    "stage_start",
+                    {
+                        "stage_id": stage_id + 1,
+                        "stage_name": _stage_name(stage_id + 1),
+                    },
+                )
 
         if report is None:
             yield "error", {"message": "No report produced"}
@@ -140,29 +171,41 @@ def stream_audit(
         closing_quote = None
         if closing_trigger:
             closing_quote = wisdom.pick_for_trigger(
-                cfg, closing_trigger, session.session_id, exclude_ids=used_quote_ids,
+                cfg,
+                closing_trigger,
+                session.session_id,
+                exclude_ids=used_quote_ids,
             )
         if closing_quote:
-            yield "quote", {
-                "stage_id": 9,
-                "quote": {
-                    "id": closing_quote.id, "author": closing_quote.author,
-                    "text_en": closing_quote.text_en, "text_cn": closing_quote.text_cn,
-                    "source": closing_quote.source, "themes": closing_quote.themes,
+            yield (
+                "quote",
+                {
+                    "stage_id": 9,
+                    "quote": {
+                        "id": closing_quote.id,
+                        "author": closing_quote.author,
+                        "text_en": closing_quote.text_en,
+                        "text_cn": closing_quote.text_cn,
+                        "source": closing_quote.source,
+                        "themes": closing_quote.themes,
+                    },
                 },
-            }
+            )
 
-        yield "final", {
-            "ticker": report.ticker,
-            "action": report.overall_action.value if report.overall_action else "",
-            "confidence": report.overall_confidence.value if report.overall_confidence else "",
-            "pass_count": sum(1 for s in report.stages if s.verdict == Verdict.PASS),
-            "stage_count": len(report.stages),
-            "report_date": report.audit_date,
-            "total_cost_usd": float(report.total_api_cost_usd or 0),
-            "inversion_failure_modes": report.inversion_failure_modes[:3],
-            "munger_questions": _munger_questions(report),
-        }
+        yield (
+            "final",
+            {
+                "ticker": report.ticker,
+                "action": report.overall_action.value if report.overall_action else "",
+                "confidence": report.overall_confidence.value if report.overall_confidence else "",
+                "pass_count": sum(1 for s in report.stages if s.verdict == Verdict.PASS),
+                "stage_count": len(report.stages),
+                "report_date": report.audit_date,
+                "total_cost_usd": float(report.total_api_cost_usd or 0),
+                "inversion_failure_modes": report.inversion_failure_modes[:3],
+                "munger_questions": _munger_questions(report),
+            },
+        )
         save_session(cfg, session)
     except Exception as e:
         session.audit_status = "error"
@@ -229,5 +272,7 @@ def _munger_questions(report: AuditReport) -> list[str]:
     # Customize if we have inversion failure modes
     if report.inversion_failure_modes:
         fm = report.inversion_failure_modes[0]
-        qs[0] = f"Stage 8 标出的最大失败模式是「{fm[:60]}」—— 未来 6 个月哪个信号会让你知道它正在发生？"
+        qs[0] = (
+            f"Stage 8 标出的最大失败模式是「{fm[:60]}」—— 未来 6 个月哪个信号会让你知道它正在发生？"
+        )
     return qs

@@ -1,4 +1,5 @@
 """Metrics logging tests — no network, pure filesystem."""
+
 from __future__ import annotations
 
 import json
@@ -12,17 +13,31 @@ from shared.metrics import cost_log_path, log_cost, read_cost_entries, total_cos
 @pytest.fixture
 def cfg(tmp_path) -> Config:
     return Config(
-        data_dir=tmp_path / "data", cache_dir=tmp_path / "data" / "cache",
-        prompts_dir=tmp_path / "prompts", docs_dir=tmp_path / "docs",
-        claude_model="", pplx_model_search="sonar", pplx_model_analysis="sonar-pro",
-        cache_fundamentals_ttl=60, cache_perplexity_ttl=60, cache_macro_ttl=60,
+        data_dir=tmp_path / "data",
+        cache_dir=tmp_path / "data" / "cache",
+        prompts_dir=tmp_path / "prompts",
+        docs_dir=tmp_path / "docs",
+        claude_model="",
+        pplx_model_search="sonar",
+        pplx_model_analysis="sonar-pro",
+        cache_fundamentals_ttl=60,
+        cache_perplexity_ttl=60,
+        cache_macro_ttl=60,
         project_root=tmp_path,
     )
 
 
 def test_log_cost_appends_jsonl(cfg):
-    log_cost(cfg, provider="claude", cost_usd=0.05, model="claude-sonnet-4-6",
-             input_tok=1000, output_tok=500, stage=3, tag="audit")
+    log_cost(
+        cfg,
+        provider="claude",
+        cost_usd=0.05,
+        model="claude-sonnet-4-6",
+        input_tok=1000,
+        output_tok=500,
+        stage=3,
+        tag="audit",
+    )
     log_cost(cfg, provider="perplexity", cost_usd=0.01, tag="s3_research")
 
     entries = read_cost_entries(cfg)
@@ -41,8 +56,10 @@ def test_log_cost_creates_dir_if_absent(cfg):
 
 def test_log_cost_swallows_errors(monkeypatch, cfg):
     """A bug in the logger must never break a live audit."""
+
     def boom(*args, **kwargs):
         raise RuntimeError("simulated disk full")
+
     monkeypatch.setattr("shared.metrics.cost_log_path", boom)
     # Should return without raising
     log_cost(cfg, provider="claude", cost_usd=0.01)

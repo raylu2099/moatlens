@@ -9,6 +9,7 @@ Used for:
 Gracefully no-ops if FRED_API_KEY missing (returns None). FRED is optional
 — the engine can fall back to hardcoded WACC if user doesn't have a key.
 """
+
 from __future__ import annotations
 
 import sys
@@ -18,7 +19,6 @@ import requests
 
 from engine.cache import cache_get, cache_set
 from shared.config import ApiKeys, Config
-
 
 FRED_BASE = "https://api.stlouisfed.org/fred/series/observations"
 

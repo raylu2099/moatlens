@@ -2,10 +2,10 @@
 Render AuditReport → Markdown for human reading.
 The same renderer output is used by CLI, web, and file archive.
 """
+
 from __future__ import annotations
 
-from engine.models import AuditReport, StageResult, Verdict
-
+from engine.models import AuditReport, Verdict
 
 VERDICT_EMOJI = {
     Verdict.PASS: "✅",
@@ -30,7 +30,9 @@ def render_markdown(report: AuditReport) -> str:
     conf = report.overall_confidence.value if report.overall_confidence else "?"
     pass_count = sum(1 for s in report.stages if s.verdict == Verdict.PASS)
     lines.append(f"## 📋 总体判断: **{action}** (置信度 {conf})")
-    lines.append(f"8 Stage: {pass_count}/{len(report.stages)} 通过 · API 成本 ${report.total_api_cost_usd:.3f}")
+    lines.append(
+        f"8 Stage: {pass_count}/{len(report.stages)} 通过 · API 成本 ${report.total_api_cost_usd:.3f}"
+    )
     lines.append("")
 
     # Thesis summary

@@ -25,9 +25,9 @@ def test_stage_prompts_exist_for_all_8_stages_and_3_verdicts():
 
 def test_stage_prompts_are_not_the_generic_one():
     for key, text in _STAGE_PROMPTS.items():
-        assert (
-            text != _GENERIC_PROMPT
-        ), f"stage {key} is using the generic prompt, defeat the purpose"
+        assert text != _GENERIC_PROMPT, (
+            f"stage {key} is using the generic prompt, defeat the purpose"
+        )
         assert len(text) > 20
 
 

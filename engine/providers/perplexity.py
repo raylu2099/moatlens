@@ -6,6 +6,7 @@ or `sonar-deep-research` (too expensive for this use case).
 
 Retries on transient errors (429/5xx/timeouts) with exponential backoff.
 """
+
 from __future__ import annotations
 
 import json
@@ -16,7 +17,6 @@ import requests
 
 from engine.cache import cache_get, cache_set
 from shared.config import ApiKeys, Config
-
 
 PPLX_ENDPOINT = "https://api.perplexity.ai/chat/completions"
 
@@ -41,6 +41,7 @@ def _call(
     # Rate-limit guard
     try:
         from shared.ratelimit import require_token
+
         require_token("perplexity")
     except ImportError:
         pass
@@ -74,7 +75,7 @@ def _call(
             if r.status_code in (408, 429, 500, 502, 503, 504):
                 last_err = f"HTTP {r.status_code}: {r.text[:150]}"
                 if attempt < max_retries:
-                    time.sleep(1.5 ** attempt)
+                    time.sleep(1.5**attempt)
                     continue
                 return {"error": last_err}
             if r.status_code != 200:
@@ -83,7 +84,7 @@ def _call(
         except requests.RequestException as e:
             last_err = f"{type(e).__name__}: {e}"
             if attempt < max_retries:
-                time.sleep(1.5 ** attempt)
+                time.sleep(1.5**attempt)
                 continue
             print(f"[perplexity] {last_err}", file=sys.stderr)
             return {"error": last_err}
@@ -111,22 +112,24 @@ def research(
         return cached.get("answer", ""), cached.get("results", []), 0.0
 
     data = _call(
-        keys, prompt, model=m, max_tokens=max_tokens,
-        recency=recency, domain_filter=domain_filter,
+        keys,
+        prompt,
+        model=m,
+        max_tokens=max_tokens,
+        recency=recency,
+        domain_filter=domain_filter,
     )
     if "error" in data:
         return f"[Perplexity error: {data['error']}]", [], 0.0
 
-    answer = (
-        data.get("choices", [{}])[0]
-        .get("message", {}).get("content", "")
-    ).strip()
+    answer = (data.get("choices", [{}])[0].get("message", {}).get("content", "")).strip()
     results = data.get("search_results", []) or []
     cost = float(data.get("usage", {}).get("cost", {}).get("total_cost", 0))
 
     # Log metrics — never raises
     try:
         from shared.metrics import log_cost
+
         log_cost(cfg, provider="perplexity", model=m, cost_usd=cost, tag=cache_ns)
     except Exception:
         pass

@@ -6,6 +6,7 @@ prompt version produced it (reproducibility).
 Prompt files live under `prompts/<slug>.md`. The first line may contain a
 version marker comment: `<!-- version: N -->`. If absent, version == "1".
 """
+
 from __future__ import annotations
 
 import re
@@ -13,7 +14,6 @@ from functools import lru_cache
 from pathlib import Path
 
 from shared.config import Config
-
 
 _VERSION_RE = re.compile(r"<!--\s*version:\s*(\S+?)\s*-->", re.IGNORECASE)
 

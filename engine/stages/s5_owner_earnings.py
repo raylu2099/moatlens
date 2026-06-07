@@ -278,7 +278,7 @@ def run(
         metrics.append(
             make_metric(
                 "Owner Earnings (3Y)",
-                f"{[round(o/1e9, 2) for o in oe_series]} B",
+                f"{[round(o / 1e9, 2) for o in oe_series]} B",
                 "全部 > 0",
                 all_positive,
             )
@@ -370,7 +370,7 @@ def run(
             ratio = roe / roic if roic > 0 else None
             if ratio:
                 tax_src = (
-                    f"{eff_tax*100:.1f}% (effective)"
+                    f"{eff_tax * 100:.1f}% (effective)"
                     if eff_tax is not None
                     else "21% (statutory fallback)"
                 )

@@ -383,10 +383,10 @@ def run(
         findings.append(
             f"**WACC 组件**: Ke={wacc_components['ke_pct']:.2f}% (Rf {risk_free:.2f}% + β {beta:.2f} × ERP 5.5%), "
             f"Kd={wacc_components['kd_pct']:.2f}% (Rf + 2%{'假设投资级利差' if True else ''}), "
-            f"Tc={wacc_components['tax_rate_used']*100:.1f}% (有效税率)"
+            f"Tc={wacc_components['tax_rate_used'] * 100:.1f}% (有效税率)"
         )
         findings.append(
-            f"  权重: 股本 {wacc_components['weight_equity']*100:.1f}% / 债务 {wacc_components['weight_debt']*100:.1f}% "
+            f"  权重: 股本 {wacc_components['weight_equity'] * 100:.1f}% / 债务 {wacc_components['weight_debt'] * 100:.1f}% "
             f"→ **WACC = {wacc:.2f}%**"
         )
     else:
@@ -414,8 +414,7 @@ def run(
     # --- 3 scenarios (industry-aware) ---
     (bear_g, base_g, bull_g), scenario_source = _scenarios_for_sector(sector)
     findings.append(
-        f"**增长假设来源**: {scenario_source} "
-        f"→ bear {bear_g}% / base {base_g}% / bull {bull_g}%"
+        f"**增长假设来源**: {scenario_source} → bear {bear_g}% / base {base_g}% / bull {bull_g}%"
     )
     if "generic" in scenario_source:
         findings.append(
@@ -444,7 +443,7 @@ def run(
             )
         )
         findings.append(
-            f"  {label.upper()}: FCF 年增 {g}%, 终值增 {tg}%, WACC {w:.2f}% " f"→ IV ${iv:.2f}"
+            f"  {label.upper()}: FCF 年增 {g}%, 终值增 {tg}%, WACC {w:.2f}% → IV ${iv:.2f}"
         )
 
     if wacc_too_low_for_terminal:

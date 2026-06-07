@@ -8,6 +8,7 @@ Produces:
 
 Used by both web (HTML render) and CLI (text render).
 """
+
 from __future__ import annotations
 
 from html import escape
@@ -49,11 +50,13 @@ def compute_diff(current: AuditReport, previous: AuditReport) -> dict[str, Any]:
         cs = cur_by_id.get(sid)
         ps = prev_by_id.get(sid)
         if not cs or not ps:
-            stages_diff.append({
-                "stage_id": sid,
-                "stage_name": (cs or ps).stage_name,
-                "only_in": "current" if cs else "previous",
-            })
+            stages_diff.append(
+                {
+                    "stage_id": sid,
+                    "stage_name": (cs or ps).stage_name,
+                    "only_in": "current" if cs else "previous",
+                }
+            )
             continue
 
         # Per-metric deltas
@@ -62,24 +65,39 @@ def compute_diff(current: AuditReport, previous: AuditReport) -> dict[str, Any]:
         for m in cs.metrics:
             pm = prev_metrics_by_name.get(m.name)
             if pm is None:
-                metric_changes.append({"name": m.name, "from": None, "to": m.value,
-                                       "pass_from": None, "pass_to": m.pass_})
+                metric_changes.append(
+                    {
+                        "name": m.name,
+                        "from": None,
+                        "to": m.value,
+                        "pass_from": None,
+                        "pass_to": m.pass_,
+                    }
+                )
                 continue
             if m.value != pm.value or m.pass_ != pm.pass_:
-                metric_changes.append({"name": m.name,
-                                       "from": pm.value, "to": m.value,
-                                       "pass_from": pm.pass_, "pass_to": m.pass_})
+                metric_changes.append(
+                    {
+                        "name": m.name,
+                        "from": pm.value,
+                        "to": m.value,
+                        "pass_from": pm.pass_,
+                        "pass_to": m.pass_,
+                    }
+                )
 
-        stages_diff.append({
-            "stage_id": sid,
-            "stage_name": cs.stage_name,
-            "verdict_from": ps.verdict.value,
-            "verdict_to": cs.verdict.value,
-            "verdict_arrow": _verdict_transition(ps.verdict, cs.verdict),
-            "claude_from": _claude_verdict(ps),
-            "claude_to": _claude_verdict(cs),
-            "metric_changes": metric_changes,
-        })
+        stages_diff.append(
+            {
+                "stage_id": sid,
+                "stage_name": cs.stage_name,
+                "verdict_from": ps.verdict.value,
+                "verdict_to": cs.verdict.value,
+                "verdict_arrow": _verdict_transition(ps.verdict, cs.verdict),
+                "claude_from": _claude_verdict(ps),
+                "claude_to": _claude_verdict(cs),
+                "metric_changes": metric_changes,
+            }
+        )
 
     return {
         "ticker": current.ticker,
@@ -100,7 +118,7 @@ def render_audit_diff_html(current: AuditReport, previous: AuditReport) -> str:
     out.append('<div class="bg-ink-800 border border-ink-700 rounded-lg p-5 mb-6">')
     out.append(
         f'<h3 class="text-lg font-semibold text-gold mb-3">📊 vs 上次审视 '
-        f'({escape(d["previous_date"])})</h3>'
+        f"({escape(d['previous_date'])})</h3>"
     )
 
     action_from = escape(d["action_from"] or "—")
@@ -119,29 +137,31 @@ def render_audit_diff_html(current: AuditReport, previous: AuditReport) -> str:
         if "only_in" in s:
             out.append(
                 f'<div class="text-gray-500">Stage {s["stage_id"]} '
-                f'{escape(s["stage_name"])} — 仅 {s["only_in"]} 有</div>'
+                f"{escape(s['stage_name'])} — 仅 {s['only_in']} 有</div>"
             )
             continue
         vf = s["verdict_from"]
         vt = s["verdict_to"]
         arrow_sym = s["verdict_arrow"]
-        color = "text-gray-400" if arrow_sym == "=" else (
-            "text-green-400" if arrow_sym == "↑" else "text-red-400"
+        color = (
+            "text-gray-400"
+            if arrow_sym == "="
+            else ("text-green-400" if arrow_sym == "↑" else "text-red-400")
         )
         out.append(
             f'<details class="border border-ink-700 rounded px-3 py-2">'
             f'<summary class="cursor-pointer font-medium">'
             f'<span class="text-gray-500">Stage {s["stage_id"]}</span> '
-            f'{escape(s["stage_name"])} '
+            f"{escape(s['stage_name'])} "
             f'<span class="{color}">{vf} {arrow_sym} {vt}</span>'
-            f'</summary>'
+            f"</summary>"
         )
         if s["claude_from"] != s["claude_to"] and (s["claude_from"] or s["claude_to"]):
             out.append(
                 f'<div class="mt-2 text-xs text-gray-400">'
-                f'Claude: <em>{escape(s["claude_from"] or "—")}</em> → '
-                f'<strong>{escape(s["claude_to"] or "—")}</strong>'
-                f'</div>'
+                f"Claude: <em>{escape(s['claude_from'] or '—')}</em> → "
+                f"<strong>{escape(s['claude_to'] or '—')}</strong>"
+                f"</div>"
             )
         if s["metric_changes"]:
             out.append('<ul class="mt-2 text-xs space-y-1">')
@@ -149,14 +169,14 @@ def render_audit_diff_html(current: AuditReport, previous: AuditReport) -> str:
                 vfrom = "—" if mc["from"] is None else str(mc["from"])
                 vto = "—" if mc["to"] is None else str(mc["to"])
                 out.append(
-                    f'<li>• {escape(mc["name"])}: '
+                    f"<li>• {escape(mc['name'])}: "
                     f'<span class="text-gray-500">{escape(vfrom)}</span> → '
                     f'<span class="text-gray-200">{escape(vto)}</span></li>'
                 )
-            out.append('</ul>')
-        out.append('</details>')
-    out.append('</div>')
-    out.append('</div>')
+            out.append("</ul>")
+        out.append("</details>")
+    out.append("</div>")
+    out.append("</div>")
     return "\n".join(out)
 
 

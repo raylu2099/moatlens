@@ -175,7 +175,7 @@ def run(
 {research_text}
 
 # Stage 1 财务摘要
-{json.dumps(stage1_raw.get('multiples', {}), ensure_ascii=False, indent=2)}
+{json.dumps(stage1_raw.get("multiples", {}), ensure_ascii=False, indent=2)}
 
 根据以上信息，按系统提示词的格式输出 JSON。"""
 

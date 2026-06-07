@@ -12,9 +12,9 @@ Endpoints used:
 - /prices/snapshot
 - /company/facts
 """
+
 from __future__ import annotations
 
-import sys
 from dataclasses import dataclass
 from typing import Any
 
@@ -23,16 +23,16 @@ import requests
 from engine.cache import cache_get, cache_set
 from shared.config import ApiKeys, Config
 
-
 API_BASE = "https://api.financialdatasets.ai"
 
 
 @dataclass
 class FundamentalSeries:
     """Multi-year financial statement rollup."""
+
     ticker: str
-    periods: list[dict[str, Any]]   # newest first, each dict = one period
-    period_type: str                # "annual" or "quarterly"
+    periods: list[dict[str, Any]]  # newest first, each dict = one period
+    period_type: str  # "annual" or "quarterly"
 
 
 class FinancialDatasetsError(RuntimeError):
@@ -45,6 +45,7 @@ def _api_get(keys: ApiKeys, path: str, params: dict) -> dict:
     # Rate-limit guard — protects subscription quota from runaway loops
     try:
         from shared.ratelimit import require_token
+
         require_token("financial_datasets")
     except ImportError:
         pass
@@ -70,7 +71,11 @@ def _api_get(keys: ApiKeys, path: str, params: dict) -> dict:
 
 
 def _cached_api_get(
-    cfg: Config, keys: ApiKeys, path: str, params: dict, cache_ns: str,
+    cfg: Config,
+    keys: ApiKeys,
+    path: str,
+    params: dict,
+    cache_ns: str,
 ) -> dict:
     """Cached wrapper — public fundamentals shareable across users."""
     cache_key = f"{path}?{'&'.join(f'{k}={v}' for k, v in sorted(params.items()))}"
@@ -83,10 +88,16 @@ def _cached_api_get(
 
 
 def fetch_income_statements(
-    cfg: Config, keys: ApiKeys, ticker: str, period: str = "annual", limit: int = 10,
+    cfg: Config,
+    keys: ApiKeys,
+    ticker: str,
+    period: str = "annual",
+    limit: int = 10,
 ) -> FundamentalSeries:
     data = _cached_api_get(
-        cfg, keys, "financials/income-statements",
+        cfg,
+        keys,
+        "financials/income-statements",
         {"ticker": ticker, "period": period, "limit": limit},
         "fd_income",
     )
@@ -98,10 +109,16 @@ def fetch_income_statements(
 
 
 def fetch_balance_sheets(
-    cfg: Config, keys: ApiKeys, ticker: str, period: str = "annual", limit: int = 10,
+    cfg: Config,
+    keys: ApiKeys,
+    ticker: str,
+    period: str = "annual",
+    limit: int = 10,
 ) -> FundamentalSeries:
     data = _cached_api_get(
-        cfg, keys, "financials/balance-sheets",
+        cfg,
+        keys,
+        "financials/balance-sheets",
         {"ticker": ticker, "period": period, "limit": limit},
         "fd_balance",
     )
@@ -113,10 +130,16 @@ def fetch_balance_sheets(
 
 
 def fetch_cash_flow_statements(
-    cfg: Config, keys: ApiKeys, ticker: str, period: str = "annual", limit: int = 10,
+    cfg: Config,
+    keys: ApiKeys,
+    ticker: str,
+    period: str = "annual",
+    limit: int = 10,
 ) -> FundamentalSeries:
     data = _cached_api_get(
-        cfg, keys, "financials/cash-flow-statements",
+        cfg,
+        keys,
+        "financials/cash-flow-statements",
         {"ticker": ticker, "period": period, "limit": limit},
         "fd_cashflow",
     )
@@ -130,17 +153,26 @@ def fetch_cash_flow_statements(
 def fetch_earnings_summary(cfg: Config, keys: ApiKeys, ticker: str) -> dict:
     """Latest BEAT/MISS + actual vs estimated EPS."""
     data = _cached_api_get(
-        cfg, keys, "earnings", {"ticker": ticker}, "fd_earnings",
+        cfg,
+        keys,
+        "earnings",
+        {"ticker": ticker},
+        "fd_earnings",
     )
     return data.get("earnings", {})
 
 
 def fetch_analyst_estimates(
-    cfg: Config, keys: ApiKeys, ticker: str, limit: int = 3,
+    cfg: Config,
+    keys: ApiKeys,
+    ticker: str,
+    limit: int = 3,
 ) -> list[dict]:
     """Forward EPS + revenue estimates."""
     data = _cached_api_get(
-        cfg, keys, "analyst-estimates",
+        cfg,
+        keys,
+        "analyst-estimates",
         {"ticker": ticker, "limit": limit},
         "fd_estimates",
     )
@@ -148,11 +180,16 @@ def fetch_analyst_estimates(
 
 
 def fetch_insider_trades(
-    cfg: Config, keys: ApiKeys, ticker: str, limit: int = 20,
+    cfg: Config,
+    keys: ApiKeys,
+    ticker: str,
+    limit: int = 20,
 ) -> list[dict]:
     """Recent insider buys/sells."""
     data = _cached_api_get(
-        cfg, keys, "insider-trades",
+        cfg,
+        keys,
+        "insider-trades",
         {"ticker": ticker, "limit": limit},
         "fd_insider",
     )
@@ -169,7 +206,11 @@ def fetch_company_facts(cfg: Config, keys: ApiKeys, ticker: str) -> dict:
     """Company metadata (name, industry, market cap, etc.)."""
     try:
         data = _cached_api_get(
-            cfg, keys, "company/facts", {"ticker": ticker}, "fd_facts",
+            cfg,
+            keys,
+            "company/facts",
+            {"ticker": ticker},
+            "fd_facts",
         )
         return data.get("company_facts", {})
     except FinancialDatasetsError:
@@ -177,6 +218,7 @@ def fetch_company_facts(cfg: Config, keys: ApiKeys, ticker: str) -> dict:
 
 
 # --- Health check ---
+
 
 def test_connection(keys: ApiKeys) -> tuple[bool, str]:
     """Ping API with a known ticker. Returns (ok, message)."""

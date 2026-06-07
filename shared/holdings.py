@@ -9,6 +9,7 @@ Schema: data/holdings.json
 
 Atomic writes via tempfile + rename so a Ctrl+C mid-write doesn't corrupt the file.
 """
+
 from __future__ import annotations
 
 import json
@@ -49,7 +50,10 @@ def save_holdings(cfg: Config, holdings: list[dict]) -> None:
 
 
 def add_holding(
-    cfg: Config, ticker: str, size: str = "", note: str = "",
+    cfg: Config,
+    ticker: str,
+    size: str = "",
+    note: str = "",
 ) -> dict:
     ticker = ticker.strip().upper()
     hs = load_holdings(cfg)

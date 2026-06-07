@@ -7,34 +7,35 @@ Each session is one audit conversation. Stored as JSON under
 Sessions older than CHAT_TTL_DAYS (default 7) get cleaned by `cleanup_expired()`.
 The web app calls cleanup on startup.
 """
+
 from __future__ import annotations
 
 import json
 import os
 import uuid
 from dataclasses import asdict, dataclass, field
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 from shared.config import Config
-
 
 CHAT_TTL_DAYS = 7
 
 
 @dataclass
 class ChatMessage:
-    role: str                  # "user" | "coach" | "system"
+    role: str  # "user" | "coach" | "system"
     text: str
-    ts: str                    # ISO timestamp
-    quote_id: str = ""         # If this message includes a quote
-    stage_id: int = 0          # If tied to a specific audit stage
+    ts: str  # ISO timestamp
+    quote_id: str = ""  # If this message includes a quote
+    stage_id: int = 0  # If tied to a specific audit stage
 
     @classmethod
-    def new(cls, role: str, text: str, **extra) -> "ChatMessage":
+    def new(cls, role: str, text: str, **extra) -> ChatMessage:
         return cls(
-            role=role, text=text,
-            ts=datetime.now(timezone.utc).isoformat(),
+            role=role,
+            text=text,
+            ts=datetime.now(UTC).isoformat(),
             **extra,
         )
 
@@ -48,24 +49,25 @@ class ChatSession:
     my_variant_view: str = ""
     tech_mode: bool = False
     messages: list[ChatMessage] = field(default_factory=list)
-    audit_status: str = "pending"       # pending | running | complete | error
-    current_stage: int = 0              # 0 = not started, 1..8 = in-progress, 9 = finalized
-    report_date: str = ""               # set when audit saved — links to /audit/<t>/<d>
+    audit_status: str = "pending"  # pending | running | complete | error
+    current_stage: int = 0  # 0 = not started, 1..8 = in-progress, 9 = finalized
+    report_date: str = ""  # set when audit saved — links to /audit/<t>/<d>
     created_at: str = ""
     updated_at: str = ""
 
     @classmethod
-    def new(cls, ticker: str = "") -> "ChatSession":
-        now = datetime.now(timezone.utc).isoformat()
+    def new(cls, ticker: str = "") -> ChatSession:
+        now = datetime.now(UTC).isoformat()
         return cls(
             session_id=uuid.uuid4().hex,
             ticker=ticker.upper(),
-            created_at=now, updated_at=now,
+            created_at=now,
+            updated_at=now,
         )
 
     def add(self, msg: ChatMessage) -> None:
         self.messages.append(msg)
-        self.updated_at = datetime.now(timezone.utc).isoformat()
+        self.updated_at = datetime.now(UTC).isoformat()
 
     def to_dict(self) -> dict:
         d = asdict(self)
@@ -74,6 +76,7 @@ class ChatSession:
 
 
 # ---------- Persistence ----------
+
 
 def chats_dir(cfg: Config) -> Path:
     d = cfg.data_dir / "chats"
@@ -95,7 +98,7 @@ def _atomic_write(path: Path, content: str) -> None:
 
 
 def save_session(cfg: Config, session: ChatSession) -> Path:
-    session.updated_at = datetime.now(timezone.utc).isoformat()
+    session.updated_at = datetime.now(UTC).isoformat()
     path = _session_path(cfg, session.session_id)
     _atomic_write(path, json.dumps(session.to_dict(), indent=2, ensure_ascii=False))
     return path
@@ -133,13 +136,15 @@ def list_sessions(cfg: Config, limit: int = 50) -> list[dict]:
     for p in d.glob("*.json"):
         try:
             data = json.loads(p.read_text(encoding="utf-8"))
-            rows.append({
-                "session_id": data.get("session_id", p.stem),
-                "ticker": data.get("ticker", ""),
-                "audit_status": data.get("audit_status", ""),
-                "created_at": data.get("created_at", ""),
-                "updated_at": data.get("updated_at", ""),
-            })
+            rows.append(
+                {
+                    "session_id": data.get("session_id", p.stem),
+                    "ticker": data.get("ticker", ""),
+                    "audit_status": data.get("audit_status", ""),
+                    "created_at": data.get("created_at", ""),
+                    "updated_at": data.get("updated_at", ""),
+                }
+            )
         except Exception:
             continue
     rows.sort(key=lambda r: r["updated_at"], reverse=True)
@@ -159,7 +164,7 @@ def cleanup_expired(cfg: Config, ttl_days: int = CHAT_TTL_DAYS) -> int:
     d = chats_dir(cfg)
     if not d.exists():
         return 0
-    cutoff = datetime.now(timezone.utc) - timedelta(days=ttl_days)
+    cutoff = datetime.now(UTC) - timedelta(days=ttl_days)
     removed = 0
     for p in d.glob("*.json"):
         try:
@@ -167,7 +172,7 @@ def cleanup_expired(cfg: Config, ttl_days: int = CHAT_TTL_DAYS) -> int:
             ts = data.get("updated_at") or data.get("created_at") or ""
             dt = datetime.fromisoformat(ts)
             if dt.tzinfo is None:
-                dt = dt.replace(tzinfo=timezone.utc)
+                dt = dt.replace(tzinfo=UTC)
             if dt < cutoff:
                 p.unlink()
                 removed += 1

@@ -15,6 +15,7 @@ Design goals:
 - mtime-aware cache so edits to wisdom.yaml are picked up without restart.
 - Tolerates partial YAML (missing fields get safe defaults).
 """
+
 from __future__ import annotations
 
 import hashlib
@@ -25,7 +26,6 @@ from pathlib import Path
 import yaml
 
 from shared.config import Config
-
 
 WISDOM_FILENAME = "wisdom.yaml"
 
@@ -44,10 +44,14 @@ class Quote:
 
     def to_dict(self) -> dict:
         return {
-            "id": self.id, "author": self.author,
-            "text_en": self.text_en, "text_cn": self.text_cn,
-            "source": self.source, "themes": list(self.themes),
-            "stages": list(self.stages), "triggers": list(self.triggers),
+            "id": self.id,
+            "author": self.author,
+            "text_en": self.text_en,
+            "text_cn": self.text_cn,
+            "source": self.source,
+            "themes": list(self.themes),
+            "stages": list(self.stages),
+            "triggers": list(self.triggers),
             "ray_note": self.ray_note,
         }
 
@@ -71,17 +75,19 @@ def _cached_parse(path_str: str, mtime: float) -> list[Quote]:
         if not qid or qid in seen_ids:
             continue
         seen_ids.add(qid)
-        out.append(Quote(
-            id=str(qid),
-            author=str(item.get("author", "")),
-            text_en=str(item.get("text_en", "")),
-            text_cn=str(item.get("text_cn", "")),
-            source=str(item.get("source", "")),
-            themes=list(item.get("themes") or []),
-            stages=[int(x) for x in (item.get("stages") or []) if isinstance(x, (int, str))],
-            triggers=list(item.get("triggers") or []),
-            ray_note=str(item.get("ray_note", "")),
-        ))
+        out.append(
+            Quote(
+                id=str(qid),
+                author=str(item.get("author", "")),
+                text_en=str(item.get("text_en", "")),
+                text_cn=str(item.get("text_cn", "")),
+                source=str(item.get("source", "")),
+                themes=list(item.get("themes") or []),
+                stages=[int(x) for x in (item.get("stages") or []) if isinstance(x, (int, str))],
+                triggers=list(item.get("triggers") or []),
+                ray_note=str(item.get("ray_note", "")),
+            )
+        )
     return out
 
 
@@ -102,27 +108,25 @@ def _stable_pick(items: list[Quote], seed: str) -> Quote | None:
 
 
 def pick_for_stage(
-    cfg: Config, stage_id: int, session_seed: str,
+    cfg: Config,
+    stage_id: int,
+    session_seed: str,
     exclude_ids: set[str] | None = None,
 ) -> Quote | None:
     """Pick one quote suited for a given stage. Excludes ids already used."""
     exclude_ids = exclude_ids or set()
-    candidates = [
-        q for q in load_wisdom(cfg)
-        if stage_id in q.stages and q.id not in exclude_ids
-    ]
+    candidates = [q for q in load_wisdom(cfg) if stage_id in q.stages and q.id not in exclude_ids]
     return _stable_pick(candidates, f"{session_seed}|stage|{stage_id}")
 
 
 def pick_for_trigger(
-    cfg: Config, trigger: str, session_seed: str,
+    cfg: Config,
+    trigger: str,
+    session_seed: str,
     exclude_ids: set[str] | None = None,
 ) -> Quote | None:
     exclude_ids = exclude_ids or set()
-    candidates = [
-        q for q in load_wisdom(cfg)
-        if trigger in q.triggers and q.id not in exclude_ids
-    ]
+    candidates = [q for q in load_wisdom(cfg) if trigger in q.triggers and q.id not in exclude_ids]
     return _stable_pick(candidates, f"{session_seed}|trigger|{trigger}")
 
 

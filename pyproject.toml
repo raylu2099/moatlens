@@ -28,6 +28,8 @@ ignore = [
     "E501",   # line too long — handled by formatter, warnings too noisy
     "B008",   # function call in default arg — FastAPI uses Depends() as default
     "B904",   # "raise from" — we don't always need the chain
+    "UP042",  # allow the (str, Enum) idiom — not migrating to StrEnum
+              # (would change str(member) output; opinionated, not a bug)
 ]
 
 [tool.ruff.lint.isort]

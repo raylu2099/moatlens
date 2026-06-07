@@ -1,4 +1,5 @@
 """Coach commentary tests — mocked Haiku, no network."""
+
 from __future__ import annotations
 
 import pytest
@@ -12,10 +13,16 @@ from shared.config import ApiKeys, Config
 @pytest.fixture
 def cfg(tmp_path) -> Config:
     return Config(
-        data_dir=tmp_path, cache_dir=tmp_path / "cache",
-        prompts_dir=tmp_path / "prompts", docs_dir=tmp_path / "docs",
-        claude_model="", pplx_model_search="sonar", pplx_model_analysis="sonar-pro",
-        cache_fundamentals_ttl=60, cache_perplexity_ttl=60, cache_macro_ttl=60,
+        data_dir=tmp_path,
+        cache_dir=tmp_path / "cache",
+        prompts_dir=tmp_path / "prompts",
+        docs_dir=tmp_path / "docs",
+        claude_model="",
+        pplx_model_search="sonar",
+        pplx_model_analysis="sonar-pro",
+        cache_fundamentals_ttl=60,
+        cache_perplexity_ttl=60,
+        cache_macro_ttl=60,
         project_root=tmp_path,
     )
 
@@ -28,13 +35,12 @@ def keys() -> ApiKeys:
 @pytest.fixture
 def stage_pass() -> StageResult:
     return StageResult(
-        stage_id=1, stage_name="能力圈 & 垃圾桶",
+        stage_id=1,
+        stage_name="能力圈 & 垃圾桶",
         verdict=Verdict.PASS,
         metrics=[
-            Metric(name="ROIC (5Y avg)", value=62.0, unit="%",
-                   threshold="> 15%", **{"pass": True}),
-            Metric(name="Gross Margin", value=44.0, unit="%",
-                   threshold="> 40%", **{"pass": True}),
+            Metric(name="ROIC (5Y avg)", value=62.0, unit="%", threshold="> 15%", **{"pass": True}),
+            Metric(name="Gross Margin", value=44.0, unit="%", threshold="> 40%", **{"pass": True}),
         ],
         findings=["Apple 是 Buffett 愿意认真看的那种公司。"],
         raw_data={},
@@ -49,7 +55,9 @@ def quote() -> Quote:
         text_en="Knowing the edge of your circle of competence...",
         text_cn="知道能力圈的边界，比能力圈本身的大小重要得多。",
         source="Berkshire 1996 致股东的信",
-        themes=["competence", "humility"], stages=[1], triggers=[],
+        themes=["competence", "humility"],
+        stages=[1],
+        triggers=[],
     )
 
 
@@ -57,14 +65,15 @@ def quote() -> Quote:
 # Rule-mode fallback
 # =====================================================================
 
+
 def test_rule_mode_includes_quote(cfg, keys, stage_pass, quote):
     out = commentary(cfg, keys, stage_pass, quote, mode="rule")
-    assert "能力圈的边界" in out                # Chinese quote
-    assert "Warren Buffett" in out             # Attribution
-    assert "Berkshire 1996" in out             # Source
+    assert "能力圈的边界" in out  # Chinese quote
+    assert "Warren Buffett" in out  # Attribution
+    assert "Berkshire 1996" in out  # Source
     assert "Stage 1" in out
-    assert "通过" in out                        # verdict translated
-    assert "问自己" in out                      # Munger-style closer
+    assert "通过" in out  # verdict translated
+    assert "问自己" in out  # Munger-style closer
 
 
 def test_rule_mode_without_quote(cfg, keys, stage_pass):
@@ -77,10 +86,10 @@ def test_rule_mode_without_quote(cfg, keys, stage_pass):
 
 def test_rule_mode_with_fail_verdict(cfg, keys, quote):
     stage_fail = StageResult(
-        stage_id=2, stage_name="诚实度测谎",
+        stage_id=2,
+        stage_name="诚实度测谎",
         verdict=Verdict.FAIL,
-        metrics=[Metric(name="OCF/NI", value=0.4, unit="x",
-                        threshold="> 1.0", **{"pass": False})],
+        metrics=[Metric(name="OCF/NI", value=0.4, unit="x", threshold="> 1.0", **{"pass": False})],
     )
     out = commentary(cfg, keys, stage_fail, quote, mode="rule")
     assert "Stage 2" in out
@@ -91,8 +100,13 @@ def test_rule_mode_with_fail_verdict(cfg, keys, quote):
 # Haiku mode (mocked)
 # =====================================================================
 
+
 def test_haiku_mode_calls_claude_and_returns_text(
-    cfg, keys, stage_pass, quote, monkeypatch,
+    cfg,
+    keys,
+    stage_pass,
+    quote,
+    monkeypatch,
 ):
     called_with = {}
 
@@ -120,7 +134,11 @@ def test_haiku_mode_calls_claude_and_returns_text(
 
 
 def test_haiku_falls_back_to_rule_on_error(
-    cfg, keys, stage_pass, quote, monkeypatch,
+    cfg,
+    keys,
+    stage_pass,
+    quote,
+    monkeypatch,
 ):
     def failing_analyze(*args, **kwargs):
         return "[Claude error: 429 rate limit]", 0.0
@@ -143,6 +161,7 @@ def test_missing_api_key_falls_back_to_rule(cfg, stage_pass, quote):
 
 def test_env_var_overrides_mode(cfg, keys, stage_pass, quote, monkeypatch):
     """MOATLENS_COACH=rule should prevent Haiku call even with valid keys."""
+
     def should_not_be_called(*args, **kwargs):
         raise AssertionError("Haiku called but mode should be rule")
 
@@ -155,8 +174,11 @@ def test_env_var_overrides_mode(cfg, keys, stage_pass, quote, monkeypatch):
 
 def test_rule_template_with_skip_verdict(quote):
     stage_skip = StageResult(
-        stage_id=8, stage_name="Inversion",
-        verdict=Verdict.SKIP, metrics=[], findings=["Insufficient priors"],
+        stage_id=8,
+        stage_name="Inversion",
+        verdict=Verdict.SKIP,
+        metrics=[],
+        findings=["Insufficient priors"],
     )
     out = _rule_template(stage_skip, quote)
     assert "跳过" in out
