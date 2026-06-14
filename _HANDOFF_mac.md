@@ -1,3 +1,5 @@
+> ⚠️ **RETIRED 2026-06-14** — MacBook 已退役,开发主力转 Mac mini(见 `_HANDOFF_mini.md`)。本文件仅作历史,不再更新。
+
 # _HANDOFF_mac.md — Mac → NAS 接力(**tracked,跨机**)
 
 > **协议(两机都守 · 2026-06-06 立)**:
