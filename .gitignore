@@ -30,3 +30,6 @@ _HANDOFF*.md
 # writes ONLY its own + reads the other's = cross-machine 接力, zero merge conflict.
 !_HANDOFF_mac.md
 !_HANDOFF_nas.md
+
+!_HANDOFF_mini.md
+!_WORK.md
